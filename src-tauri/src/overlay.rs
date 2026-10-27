@@ -5,6 +5,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutEvent, ShortcutState};
 
+use crate::platform;
+
 const LABEL: &str = "overlay";
 
 #[derive(Clone, Copy, Serialize)]
@@ -16,20 +18,11 @@ pub enum Mode {
     Previous,
 }
 
-/// macOS の Ctrl+Option+Space は入力ソースの切り替えと重なるため、Cmd も足している（仮。実機で確認して決める）
-fn base_modifiers() -> Modifiers {
-    if cfg!(target_os = "macos") {
-        Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER
-    } else {
-        Modifiers::CONTROL | Modifiers::ALT
-    }
-}
-
 /// [新規入力, 前回の編集]
 pub fn shortcuts() -> [Shortcut; 2] {
     [
-        Shortcut::new(Some(base_modifiers()), Code::Space),
-        Shortcut::new(Some(base_modifiers() | Modifiers::SHIFT), Code::Space),
+        Shortcut::new(Some(platform::shortcut_modifiers()), Code::Space),
+        Shortcut::new(Some(platform::shortcut_modifiers() | Modifiers::SHIFT), Code::Space),
     ]
 }
 

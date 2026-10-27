@@ -4,6 +4,7 @@
 mod commands;
 mod history_store;
 mod overlay;
+mod platform;
 
 use std::sync::{Arc, Mutex};
 
@@ -31,8 +32,7 @@ fn main() {
                 .build(),
         )
         .setup(|app| {
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            platform::setup(app);
 
             let dict_path = app.path().resolve("suzuri.dict", BaseDirectory::Resource)?;
             let dict = Dictionary::open(&dict_path).map_err(|e| {
