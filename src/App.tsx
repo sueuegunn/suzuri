@@ -27,6 +27,27 @@ const WHEEL_LINE_PX = 40;
 /** 候補一覧に並べる数 */
 const CANDIDATE_LIST_SIZE = 9;
 
+/** Enter で何をするか。copy はクリップボードに入れるだけ、paste は呼び出し元に貼り付けまでする */
+type Mode = "copy" | "paste";
+const MODE_KEY = "suzuri.mode";
+
+/** 前回使ったモード。読めなければクリップボードだけのモード */
+function loadMode(): Mode {
+  try {
+    return localStorage.getItem(MODE_KEY) === "paste" ? "paste" : "copy";
+  } catch {
+    return "copy";
+  }
+}
+
+function saveMode(mode: Mode) {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // 覚えられなくても、その回の切り替えは効く
+  }
+}
+
 type Drag = { pin: number; target: number; x: number; y: number; height: number };
 
 /** 未確定のローマ字をカーソル位置に確定させる */
@@ -46,6 +67,8 @@ export default function App() {
   const wheelAcc = useRef(0);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>(loadMode);
+  const modeRef = useRef(mode);
   const panelRef = useRef<HTMLDivElement>(null);
   /** 上段（読み）の領域。ピンの位置の計算の基準 */
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -95,7 +118,7 @@ export default function App() {
       surface: seg.candidates[seg.selected],
       wasFirst: seg.selected === 0,
     }));
-    engine.commit(text, segments);
+    engine.commit(text, segments, modeRef.current === "paste");
   };
 
   const convert = () => {
@@ -130,6 +153,13 @@ export default function App() {
     const inserted = length(r.kana);
     const next = { ...s, kana: splice(s.kana, s.caret, 0, r.kana), caret: s.caret + inserted, pending: r.pending };
     edit(s, next, s.caret, 0, inserted);
+  };
+
+  const toggleMode = () => {
+    const next: Mode = modeRef.current === "copy" ? "paste" : "copy";
+    modeRef.current = next;
+    setMode(next);
+    saveMode(next);
   };
 
   /** Shift を押しながら打った英字。ローマ字にせず、そのまま入れる */
@@ -267,8 +297,8 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
-  const handlers = useRef({ type, typeLetter, backspace, convert, commit, cancel, moveCaret });
-  handlers.current = { type, typeLetter, backspace, convert, commit, cancel, moveCaret };
+  const handlers = useRef({ type, typeLetter, backspace, convert, commit, cancel, moveCaret, toggleMode });
+  handlers.current = { type, typeLetter, backspace, convert, commit, cancel, moveCaret, toggleMode };
 
   useEffect(() => {
     const unlisten = listen<"new" | "previous">("summon", (e) => {
@@ -289,6 +319,9 @@ export default function App() {
           break;
         case "Enter":
           h.commit();
+          break;
+        case "Tab":
+          h.toggleMode();
           break;
         case " ":
           if (!s.segments) h.convert();
@@ -431,10 +464,16 @@ export default function App() {
       {segments && listFor !== null && segments[listFor] && (
         <CandidateList segment={segments[listFor]} anchor={() => resultRefs.current[listFor]} />
       )}
-      <div className="hint">
-        {segments
-          ? "ホイール: 候補 / ピンをドラッグ: 区切り / 右クリック: ピン追加・削除 / Ctrl+ホイール: スクロール / Enter: コピー"
-          : "Space: 変換 / Enter: そのままコピー / Esc: 閉じる"}
+      <div className="footer">
+        <div className="hint">
+          {segments
+            ? "ホイール: 候補 / ピンをドラッグ: 区切り / 右クリック: ピン追加・削除 / Ctrl+ホイール: スクロール"
+            : "Space: 変換 / Esc: 閉じる"}
+        </div>
+        <div className={"mode " + mode}>
+          Enter: {mode === "paste" ? "貼り付け" : "コピー"}
+          <span className="mode-key">Tab で切り替え</span>
+        </div>
       </div>
     </div>
   );

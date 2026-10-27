@@ -21,6 +21,8 @@ pub struct AppState {
     pub engine: Engine,
     pub history: Arc<Mutex<UserHistory>>,
     pub saver: history_store::Saver,
+    /// ショートカットで呼び出す前に前面にあったウィンドウ（貼り付けの戻り先）
+    pub caller: Mutex<Option<platform::Caller>>,
 }
 
 fn main() {
@@ -48,6 +50,7 @@ fn main() {
                 engine: Engine::new(dict),
                 history,
                 saver,
+                caller: Mutex::new(None),
             });
 
             for shortcut in overlay::shortcuts() {
@@ -70,7 +73,11 @@ fn main() {
                 .tooltip("スズリ")
                 .menu(&Menu::with_items(app, &[&open, &reset, &quit])?)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => overlay::show(app, overlay::Mode::New),
+                    "open" => {
+                        // トレイから開いたときは戻り先がないので、貼り付けはしない
+                        *app.state::<AppState>().caller.lock().unwrap() = None;
+                        overlay::show(app, overlay::Mode::New);
+                    }
                     "reset_history" => {
                         let state = app.state::<AppState>();
                         *state.history.lock().unwrap() = UserHistory::default();

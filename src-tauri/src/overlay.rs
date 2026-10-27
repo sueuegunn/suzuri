@@ -5,6 +5,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutEvent, ShortcutState};
 
+use crate::{AppState, platform};
+
 const LABEL: &str = "overlay";
 
 #[derive(Clone, Copy, Serialize)]
@@ -30,6 +32,16 @@ pub fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
         return;
     }
     let [new, previous] = shortcuts();
+    if *shortcut != new && *shortcut != previous {
+        return;
+    }
+    // オーバーレイが出ている間に押し直したときは、最初の戻り先を保つ
+    let visible = app
+        .get_webview_window(LABEL)
+        .is_some_and(|w| w.is_visible().unwrap_or(false));
+    if !visible {
+        *app.state::<AppState>().caller.lock().unwrap() = platform::caller();
+    }
     if *shortcut == new {
         show(app, Mode::New);
     } else if *shortcut == previous {
@@ -41,6 +53,7 @@ pub fn show(app: &AppHandle, mode: Mode) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
     };
+    platform::before_show(app);
     center_on_cursor_monitor(app, &window);
     // 表示する前に状態を切り替えさせ、前の内容が一瞬見えないようにする
     let _ = window.emit("summon", mode);

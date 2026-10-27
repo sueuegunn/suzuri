@@ -11,6 +11,7 @@ export const engine = {
     invoke<EngineSegment[]>("convert_with_boundaries", { reading, boundaries }),
   resegment: (reading: string, boundaries: number[], start: number, end: number) =>
     invoke<EngineSegment[]>("resegment", { reading, boundaries, start, end }),
-  commit: (text: string, segments: Committed[]) => invoke<void>("commit", { text, segments }),
+  commit: (text: string, segments: Committed[], paste: boolean) =>
+    invoke<void>("commit", { text, segments, paste }),
   cancel: () => invoke<void>("cancel"),
 };
