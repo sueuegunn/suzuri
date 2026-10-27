@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/suzuri-engine", "crates/suzuri-dictgen", "src-tauri"]
+members = ["crates/suzuri-engine"]
 
 [workspace.package]
 edition = "2024"
