@@ -4,7 +4,7 @@
 
 mod convert;
 pub mod dict;
-mod history;
+pub mod history;
 pub mod kana;
 
 pub use convert::{Conversion, Engine, Segment};

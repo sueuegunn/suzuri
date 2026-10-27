@@ -112,7 +112,7 @@ impl UserHistory {
     pub fn rank(&self, reading: &str, candidates: &mut Vec<String>) {
         let Some(list) = self.entries.get(reading) else { return };
         let mut learned: Vec<&(String, u64)> = list.iter().collect();
-        learned.sort_by(|a, b| b.1.cmp(&a.1));
+        learned.sort_by_key(|(_, t)| std::cmp::Reverse(*t));
         let learned: Vec<String> = learned.into_iter().map(|(s, _)| s.clone()).collect();
         candidates.retain(|c| !learned.contains(c));
         candidates.splice(0..0, learned);
