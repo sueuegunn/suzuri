@@ -146,6 +146,12 @@ impl Engine {
                 cuts.push(b.start);
             }
         }
+        // スペースは前後の語と切り離し、それだけで1文節にする
+        for (i, c) in reading.chars().enumerate() {
+            if c.is_whitespace() {
+                cuts.extend([i, i + 1].into_iter().filter(|&p| 0 < p && p < n && auto.start < p && p < auto.end));
+            }
+        }
         cuts.sort_unstable();
         cuts.dedup();
 
@@ -523,6 +529,15 @@ mod tests {
         let e = engine();
         let c = e.convert("。", &UserHistory::default());
         assert_eq!(c.segments[0].candidates, ["。", ".", "．"]);
+    }
+
+    #[test]
+    fn makes_space_its_own_segment() {
+        let e = engine();
+        let c = e.convert("UI をわたる", &UserHistory::default());
+        let readings: Vec<&str> = c.segments.iter().map(|s| s.reading.as_str()).collect();
+        assert_eq!(readings, ["UI", " ", "を", "わたる"]);
+        assert_eq!(c.segments[1].candidates, [" ", "　"]);
     }
 
     #[test]

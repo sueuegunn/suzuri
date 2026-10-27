@@ -64,6 +64,8 @@ fn alternatives(c: char, long_vowel: bool) -> Vec<String> {
         '～' => &["~"],
         '？' => &["?"],
         '！' => &["!"],
+        ' ' => &["　"],
+        '　' => &[" "],
         _ => &[],
     };
     if !fixed.is_empty() {
@@ -99,6 +101,7 @@ mod tests {
         assert_eq!(symbol_variants("ー"), ["-", "－"]);
         assert_eq!(symbol_variants("@を"), ["＠を"]);
         assert_eq!(symbol_variants("（"), ["("]);
+        assert_eq!(symbol_variants(" "), ["　"]);
         // 語の中の長音は書き換えない
         assert!(symbol_variants("らーめん").is_empty());
         assert!(symbol_variants("かな").is_empty());

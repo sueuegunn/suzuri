@@ -328,8 +328,9 @@ export default function App() {
           h.toggleMode();
           break;
         case " ":
-          // 打つそばから変換しているので、Space は打ちかけのローマ字を確定させるだけ
-          h.typeLetter("");
+          // 打つそばから変換しているので、Space は打ちかけのローマ字を確定させるだけ。
+          // Shift+Space は半角スペースを入れる（全角はホイールで選ぶ）
+          h.typeLetter(e.shiftKey ? " " : "");
           break;
         case "Backspace":
           h.backspace();
