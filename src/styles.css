@@ -209,12 +209,12 @@ body {
   border-radius: 10px;
   font-size: 13px;
   color: #ffffff;
-  background: var(--accent);
+  background: #0068d6;
 }
 
 /* 貼り付けは別のアプリに文字を入れるので、コピーと色で見分けられるようにする */
 .mode.paste {
-  background: #ff9500;
+  background: #e08300;
 }
 
 .mode-key {
