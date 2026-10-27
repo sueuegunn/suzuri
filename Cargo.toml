@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["crates/suzuri-engine", "crates/suzuri-dictgen", "src-tauri"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
+[profile.dev.package."*"]
+opt-level = 2
