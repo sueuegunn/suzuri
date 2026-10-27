@@ -12,7 +12,7 @@ use suzuri_engine::Engine;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
 use tauri::Manager;
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, Submenu};
 use tauri::path::BaseDirectory;
 use tauri::tray::TrayIconBuilder;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -57,13 +57,25 @@ fn main() {
             }
 
             let open = MenuItem::with_id(app, "open", "開く", true, None::<&str>)?;
+            // 押し間違いで消さないよう、サブメニューの中の項目を選んだときだけリセットする
+            let reset = Submenu::with_items(
+                app,
+                "学習をリセット",
+                true,
+                &[&MenuItem::with_id(app, "reset_history", "すべての学習を消す", true, None::<&str>)?],
+            )?;
             let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().ok_or("アイコンがありません")?)
                 .tooltip("スズリ")
-                .menu(&Menu::with_items(app, &[&open, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &reset, &quit])?)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => overlay::show(app, overlay::Mode::New),
+                    "reset_history" => {
+                        let state = app.state::<AppState>();
+                        *state.history.lock().unwrap() = UserHistory::default();
+                        state.saver.request();
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })

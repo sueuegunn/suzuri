@@ -68,16 +68,16 @@ suzuri/
 4. ピンと候補を調整する（下の表）
 5. Enter で確定する。完成形をクリップボードに入れてオーバーレイを閉じる
 
-Esc はクリップボードに入れずに閉じる。どちらで閉じても、閉じる直前の状態を「前回」として保存する。
+Esc はクリップボードに入れずに閉じる。オーバーレイの外をクリックするなどしてフォーカスが外れたときも、Esc と同じく閉じる。どれで閉じても、閉じる直前の状態を「前回」として保存する。
 
 ### ショートカット（既定値。設定で変更可能）
 
 | 操作 | Windows | macOS |
 |---|---|---|
-| 新規入力で呼び出す | `Ctrl+Alt+Space` | 未定（下記） |
-| 前回を編集する | `Ctrl+Alt+Shift+Space` | 未定 |
+| 新規入力で呼び出す | `Ctrl+Alt+Space` | `Ctrl+Option+Cmd+Space`（仮） |
+| 前回を編集する | `Ctrl+Alt+Shift+Space` | `Ctrl+Option+Cmd+Shift+Space`（仮） |
 
-macOS の `Ctrl+Option+Space` は入力ソースの切り替えと重なるため使えない。実機で衝突を確認してから決める。
+macOS の `Ctrl+Option+Space` は入力ソースの切り替えと重なるため使えない。仮に Cmd を足しており、実機で衝突を確認してから決める。
 
 「前回を編集する」で呼び出すと、前回のひらがな・ピン・選んだ候補をそのまま復元する。保存する前回は当面1件だけ。
 
@@ -112,20 +112,23 @@ macOS の `Ctrl+Option+Space` は入力ソースの切り替えと重なるた�
 
 1. 読みの各位置から辞書を前方一致で引き、単語の候補を並べる（ラティス）
 2. Viterbi で、単語コストと接続コストの合計が最小の並びを求める
-3. 自立語で新しい文節を始め、助詞・助動詞などの付属語は直前の文節に付けて、文節に区切る
+3. 自立語で新しい文節を始め、助詞・助動詞などの付属語は直前の文節に付けて、文節に区切る。判定には Mozc の `segmenter.def` を使い、数字・助数詞・「第」などの数のまとまり（「3時」「第2」）は区切らない規則を優先して足す
 4. 文節ごとに、その範囲に限って上位の候補を複数求める
 
-### インターフェース（案）
+### インターフェース
 
 ```rust
 /// 読みを自動で文節に区切り、各文節の候補を返す
-fn convert(reading: &str) -> Conversion;
+fn convert(&self, reading: &str, history: &UserHistory) -> Conversion;
 
-/// ユーザーが決めた区切りに従って、各文節の候補を返す
-fn convert_with_boundaries(reading: &str, boundaries: &[usize]) -> Conversion;
+/// ユーザーが決めた区切り（文字位置）に従って、各文節の候補を返す
+fn convert_with_boundaries(&self, reading: &str, boundaries: &[usize], history: &UserHistory) -> Conversion;
 
-/// ユーザーが選んだ候補を学習する
-fn learn(selections: &[Selection]);
+/// 区切りは保ったまま、range の内側だけ自動で区切り直す（ひらがなを直したとき）
+fn resegment(&self, reading: &str, boundaries: &[usize], range: Range<usize>, history: &UserHistory) -> Conversion;
+
+/// 確定した文節を学習する
+UserHistory::commit(&mut self, committed: &[Committed]);
 ```
 
 ローマ字からひらがなへの変換はフロントエンド側（TypeScript）で行う。打鍵ごとに Rust を呼ばずに済むため。
@@ -139,7 +142,7 @@ fn learn(selections: &[Selection]);
 - 変換中に参照するのはメモリ上のハッシュ表だけ。変換中にファイルを読み書きしない
 - ファイルへの保存はオーバーレイを閉じたあとに、別スレッドでまとめて行う。一時ファイルに書いてから置き換え、途中で落ちても壊れないようにする
 - ファイルが壊れていたら捨てて空から始める。起動を失敗させない
-- 学習をリセットする手段を用意する
+- 学習をリセットする手段を用意する（トレイメニューの「学習をリセット」）
 - 学習データが上限まで溜まった状態でもベンチマークで速度を確認する
 
 ## 性能の目標
@@ -156,7 +159,7 @@ fn learn(selections: &[Selection]);
 
 | 処理 | Windows | macOS |
 |---|---|---|
-| オーバーレイで OS の IME を止める | ウィンドウの入力コンテキストを外す（IMM） | 表示時に英字の入力ソースへ切り替え、閉じるときに戻す |
+| オーバーレイで OS の IME を止める | 入力欄を置かず、編集できない文書にフォーカスしてキーを直接受ける（WebView は編集できない要素では IME を使わない）。実機で効かなければ IMM で入力コンテキストを外す | 同左。効かなければ表示時に英字の入力ソースへ切り替え、閉じるときに戻す |
 | 透明・最前面ウィンドウ | Tauri の設定で対応 | Tauri の `macOSPrivateApi` を有効にする |
 | 閉じたあとのフォーカス | 元のアプリに戻す | 元のアプリに戻す |
 
