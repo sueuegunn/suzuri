@@ -199,7 +199,7 @@ body {
   /* 区切りの空白を詰めずに出す */
   white-space: pre;
   font-size: 12px;
-  color: var(--muted);
+  color: #636366;
 }
 
 /* Enter で何が起きるかは、確定の直前に必ず目に入るよう目立たせる */
@@ -208,13 +208,13 @@ body {
   padding: 2px 10px;
   border-radius: 10px;
   font-size: 13px;
-  color: var(--fg);
-  background: rgba(0, 0, 0, 0.07);
-}
-
-.mode.paste {
   color: #ffffff;
   background: var(--accent);
+}
+
+/* 貼り付けは別のアプリに文字を入れるので、コピーと色で見分けられるようにする */
+.mode.paste {
+  background: #ff9500;
 }
 
 .mode-key {
