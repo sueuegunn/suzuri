@@ -468,7 +468,7 @@ export default function App() {
         <div className="hint">
           {segments
             ? "ホイール: 候補 / ピンをドラッグ: 区切り / 右クリック: ピン追加・削除 / Ctrl+ホイール: スクロール"
-            : "Space: 変換 / Esc: 閉じる"}
+            : "Esc: 閉じる   /   Space: 変換"}
         </div>
         <div className={"mode " + mode}>
           Enter: {mode === "paste" ? "貼り付け" : "コピー"}

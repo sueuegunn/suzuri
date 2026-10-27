@@ -185,6 +185,8 @@ body {
 }
 
 .hint {
+  /* 区切りの空白を詰めずに出す */
+  white-space: pre;
   font-size: 12px;
   color: var(--muted);
 }
