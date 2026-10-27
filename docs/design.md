@@ -74,10 +74,15 @@ Esc はクリップボードに入れずに閉じる。オーバーレイの外�
 
 | 操作 | Windows | macOS |
 |---|---|---|
-| 新規入力で呼び出す | `Ctrl+Alt+Space` | `Ctrl+Option+Cmd+Space`（仮） |
-| 前回を編集する | `Ctrl+Alt+Shift+Space` | `Ctrl+Option+Cmd+Shift+Space`（仮） |
+| 新規入力で呼び出す | `Alt+J` | `Option+J` |
+| 前回を編集する | `Alt+Shift+J` | `Option+Shift+J` |
 
-macOS の `Ctrl+Option+Space` は入力ソースの切り替えと重なるため使えない。仮に Cmd を足しており、実機で衝突を確認してから決める。
+J は標準のメニューでほぼ使われず、ホームポジションで押せるため選んだ。代わりに次のものが使えなくなる。
+
+- JetBrains 系 IDE の `Alt+J`（次の同じ語を選択）と `Alt+Shift+J`
+- macOS で `Option+J` で打つ「∆」
+
+`Alt+Space` は Windows のウィンドウメニューや PowerToys Run と、`Alt+V` はメニューバーの「表示」と重なるため避けた。macOS は実機で確かめてから確定する。
 
 「前回を編集する」で呼び出すと、前回のひらがな・ピン・選んだ候補をそのまま復元する。保存する前回は当面1件だけ。
 

@@ -5,8 +5,6 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutEvent, ShortcutState};
 
-use crate::platform;
-
 const LABEL: &str = "overlay";
 
 #[derive(Clone, Copy, Serialize)]
@@ -18,11 +16,12 @@ pub enum Mode {
     Previous,
 }
 
-/// [新規入力, 前回の編集]
+/// [新規入力, 前回の編集]。Alt（macOS は Option）+J。
+/// J は標準のメニューでほぼ使われず、ホームポジションで押せるため選んだ
 pub fn shortcuts() -> [Shortcut; 2] {
     [
-        Shortcut::new(Some(platform::shortcut_modifiers()), Code::Space),
-        Shortcut::new(Some(platform::shortcut_modifiers() | Modifiers::SHIFT), Code::Space),
+        Shortcut::new(Some(Modifiers::ALT), Code::KeyJ),
+        Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyJ),
     ]
 }
 
