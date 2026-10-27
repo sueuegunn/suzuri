@@ -36,52 +36,40 @@ body {
   border-radius: 14px;
 }
 
-.body {
+/* 上段（読み）と下段（変換結果）は同じ高さで分け、それぞれではみ出したらスクロールする */
+.area {
   position: relative;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
-.input {
-  font-size: 24px;
+.result-area {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 26px;
   line-height: 1.6;
   white-space: pre-wrap;
 }
 
-.columns {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  row-gap: 12px;
+.reading {
+  font-size: 24px;
+  /* ピンの頭が上の行に重ならないよう、行の間をあける */
+  line-height: 1.9;
+  white-space: pre-wrap;
 }
 
-.column {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 2px 4px;
-  border-radius: 6px;
+.seg {
+  border-radius: 4px;
 }
 
-.column:hover {
+.seg.hover {
   background: var(--hover);
 }
 
-.column.active {
+.seg.active {
   background: var(--active);
-}
-
-.reading {
-  font-size: 18px;
-  line-height: 1.5;
-  color: var(--muted);
-  white-space: pre;
-}
-
-.surface {
-  font-size: 26px;
-  line-height: 1.4;
-  white-space: pre;
 }
 
 .char {
@@ -115,7 +103,10 @@ body {
 
 .pin {
   position: relative;
+  display: inline-block;
   width: 12px;
+  height: 1.3em;
+  vertical-align: -0.25em;
   cursor: ew-resize;
   touch-action: none;
 }
@@ -156,14 +147,11 @@ body {
 }
 
 .candidates {
-  position: absolute;
+  position: fixed;
   z-index: 1;
-  top: 100%;
-  left: 0;
-  margin: 4px 0 0;
+  margin: 0;
   padding: 4px;
   list-style: none;
-  min-width: 100%;
   background: #2b2f36;
   border: 1px solid #454c57;
   border-radius: 6px;
@@ -187,17 +175,8 @@ body {
   text-align: right;
 }
 
-.footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 8px;
-}
-
-.preview {
-  min-height: 1.5em;
-  font-size: 16px;
-}
-
 .hint {
+  padding-top: 8px;
   font-size: 12px;
   color: var(--muted);
 }

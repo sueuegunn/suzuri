@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { engine } from "./engine";
 import { feed, flush } from "./romaji";
@@ -45,7 +45,12 @@ export default function App() {
   const listTimer = useRef<number | undefined>(undefined);
   const wheelAcc = useRef(0);
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  /** 上段（読み）の領域。ピンの位置の計算の基準 */
   const bodyRef = useRef<HTMLDivElement>(null);
+  /** 下段の各文節の要素。候補一覧の位置合わせに使う */
+  const resultRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
   const update = (s: Session) => {
     sessionRef.current = s;
@@ -260,6 +265,7 @@ export default function App() {
       update(e.payload === "previous" ? previousRef.current : emptySession);
       setListFor(null);
       setDrag(null);
+      setHover(null);
       window.focus();
     });
     const onKey = (e: KeyboardEvent) => {
@@ -305,18 +311,21 @@ export default function App() {
     // React の onWheel は passive で止められないため、ここで止める。Ctrl+ホイールの拡大縮小も止まる
     const noWheelScroll = (e: WheelEvent) => {
       e.preventDefault();
-      if (!e.ctrlKey) return;
-      const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? body.clientHeight : 1;
-      body.scrollTop += e.deltaY * unit;
+      if (!e.ctrlKey || !(e.target instanceof Element)) return;
+      // 上段・下段のうち、マウスがある方をスクロールする
+      const area = e.target.closest<HTMLElement>(".area");
+      if (!area) return;
+      const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? area.clientHeight : 1;
+      area.scrollTop += e.deltaY * unit;
     };
-    const body = bodyRef.current!;
-    body.addEventListener("wheel", noWheelScroll, { passive: false });
+    const panel = panelRef.current!;
+    panel.addEventListener("wheel", noWheelScroll, { passive: false });
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
     window.addEventListener("contextmenu", noMenu);
     return () => {
       unlisten.then((f) => f());
-      body.removeEventListener("wheel", noWheelScroll);
+      panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("contextmenu", noMenu);
@@ -353,59 +362,90 @@ export default function App() {
     </>
   );
 
+  /** 上段と下段で同じ文節を同じように強調する */
+  const segClass = (i: number) => "seg" + (listFor === i ? " active" : hover === i ? " hover" : "");
+
+  /** 上段・下段の文節に共通のマウス操作 */
+  const segHandlers = (i: number) => ({
+    onWheel: (e: React.WheelEvent) => onWheel(i, e),
+    onMouseEnter: () => setHover(i),
+    onMouseLeave: () => {
+      setHover(null);
+      if (listFor === i) setListFor(null);
+    },
+  });
+
+  const segments = session.segments;
   return (
-    <div className="panel">
-      <div className="body" ref={bodyRef}>
-        {session.segments ? (
-          <div className="columns">
-            {session.segments.map((seg, i) => (
-              <Fragment key={`${seg.start}:${seg.end}`}>
-                {i > 0 && (
-                  <div
-                    className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
-                    title="ドラッグで区切りを移動、右クリックで削除"
-                    onPointerDown={(e) => e.button === 0 && e.currentTarget.setPointerCapture(e.pointerId)}
-                    onPointerMove={(e) => onPinMove(i - 1, e)}
-                    onPointerUp={() => onPinUp(i - 1)}
-                    onContextMenu={() => removePin(i - 1)}
-                  />
-                )}
-                <div
-                  className={"column" + (listFor === i ? " active" : "")}
-                  onWheel={(e) => onWheel(i, e)}
-                  onMouseLeave={() => listFor === i && setListFor(null)}
-                >
-                  <div className="reading">{chars(seg.reading, seg.start, i === session.segments!.length - 1)}</div>
-                  <div className="surface">{seg.candidates[seg.selected]}</div>
-                  {listFor === i && <CandidateList segment={seg} />}
-                </div>
-              </Fragment>
-            ))}
-          </div>
-        ) : (
-          <div className="input">{chars(session.kana, 0, true)}</div>
-        )}
+    <div className="panel" ref={panelRef}>
+      <div className="area reading-area" ref={bodyRef}>
+        <div className="reading">
+          {segments
+            ? segments.map((seg, i) => (
+                <Fragment key={`${seg.start}:${seg.end}`}>
+                  {i > 0 && (
+                    <span
+                      className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
+                      title="ドラッグで区切りを移動、右クリックで削除"
+                      onPointerDown={(e) => e.button === 0 && e.currentTarget.setPointerCapture(e.pointerId)}
+                      onPointerMove={(e) => onPinMove(i - 1, e)}
+                      onPointerUp={() => onPinUp(i - 1)}
+                      onContextMenu={() => removePin(i - 1)}
+                    />
+                  )}
+                  <span className={segClass(i)} {...segHandlers(i)}>
+                    {chars(seg.reading, seg.start, i === segments.length - 1)}
+                  </span>
+                </Fragment>
+              ))
+            : chars(session.kana, 0, true)}
+        </div>
         {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
       </div>
-      <div className="footer">
-        <div className="preview">{session.segments ? resultText(session) : ""}</div>
-        <div className="hint">
-          {session.segments
-            ? "ホイール: 候補 / ピンをドラッグ: 区切り / 右クリック: ピン追加・削除 / Enter: コピー"
-            : "Space: 変換 / Enter: そのままコピー / Esc: 閉じる"}
-        </div>
+      <div className="area result-area">
+        {segments?.map((seg, i) => (
+          <span
+            key={`${seg.start}:${seg.end}`}
+            className={segClass(i)}
+            ref={(el) => {
+              resultRefs.current[i] = el;
+            }}
+            {...segHandlers(i)}
+          >
+            {seg.candidates[seg.selected]}
+          </span>
+        ))}
+      </div>
+      {segments && listFor !== null && segments[listFor] && (
+        <CandidateList segment={segments[listFor]} anchor={() => resultRefs.current[listFor]} />
+      )}
+      <div className="hint">
+        {segments
+          ? "ホイール: 候補 / ピンをドラッグ: 区切り / 右クリック: ピン追加・削除 / Ctrl+ホイール: スクロール / Enter: コピー"
+          : "Space: 変換 / Enter: そのままコピー / Esc: 閉じる"}
       </div>
     </div>
   );
 }
 
-function CandidateList({ segment }: { segment: Segment }) {
+/** 下段の文節の下に出す候補一覧。下に入りきらなければ上に出す */
+function CandidateList({ segment, anchor }: { segment: Segment; anchor: () => HTMLElement | null }) {
+  const ref = useRef<HTMLOListElement>(null);
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const a = anchor()?.getBoundingClientRect();
+    if (!list || !a) return;
+    const below = a.bottom + 4;
+    const top = below + list.offsetHeight <= window.innerHeight ? below : a.top - 4 - list.offsetHeight;
+    list.style.top = `${Math.max(0, top)}px`;
+    list.style.left = `${Math.max(0, Math.min(a.left, window.innerWidth - list.offsetWidth))}px`;
+  });
   const n = segment.candidates.length;
   const half = Math.floor(CANDIDATE_LIST_SIZE / 2);
   const from = Math.max(0, Math.min(segment.selected - half, n - CANDIDATE_LIST_SIZE));
   const shown = segment.candidates.slice(from, from + CANDIDATE_LIST_SIZE);
   return (
-    <ol className="candidates">
+    <ol className="candidates" ref={ref}>
       {shown.map((c, j) => (
         <li key={from + j} className={from + j === segment.selected ? "selected" : ""}>
           {c}
