@@ -96,8 +96,14 @@ export type RomajiResult = {
   pending: string;
 };
 
-/** 未確定のローマ字 `pending` に1文字足し、確定したかなと残りを返す */
-export function feed(pending: string, ch: string): RomajiResult {
+/**
+ * 未確定のローマ字 `pending` に1文字足し、確定したかなと残りを返す。
+ * `prev` は入力位置の直前の文字。数字の直後の「.」「,」は「3.14」「1,000」のため半角のまま入れる
+ */
+export function feed(pending: string, ch: string, prev = ""): RomajiResult {
+  if (pending === "" && (ch === "." || ch === ",") && /^[0-9]$/.test(prev)) {
+    return { kana: ch, pending: "" };
+  }
   let buf = pending + ch.toLowerCase();
   let kana = "";
   while (buf.length > 0) {
@@ -130,7 +136,7 @@ export function toHiragana(text: string): string {
   let pending = "";
   let out = "";
   for (const ch of text) {
-    const r = feed(pending, ch);
+    const r = feed(pending, ch, out.slice(-1));
     out += r.kana;
     pending = r.pending;
   }

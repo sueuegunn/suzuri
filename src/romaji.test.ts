@@ -18,6 +18,9 @@ describe("toHiragana", () => {
     ["xtu", "っ"],
     ["nyanko", "にゃんこ"],
     ["2kai", "2かい"],
+    ["3.14 to 1,000", "3.14 と 1,000"],
+    ["ha.", "は。"],
+    ["3ko,", "3こ、"],
     ["WATASHI", "わたし"],
   ])("%s → %s", (input, expected) => {
     expect(toHiragana(input)).toBe(expected);

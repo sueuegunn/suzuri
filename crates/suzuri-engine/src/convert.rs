@@ -10,10 +10,12 @@ use std::ops::Range;
 
 use crate::dict::Dictionary;
 use crate::history::UserHistory;
-use crate::kana::{ascii_variants, hiragana_to_katakana};
+use crate::kana::{ascii_variants, hiragana_to_katakana, symbol_variants};
 
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
 const UNKNOWN_COST: i32 = 20_000;
+/// 半角数字の並び（「1000」「3.14」）を1語にしたときのコスト。Mozc の「いち → 1」（753）と同じくらいにする
+const NUMBER_COST: i32 = 700;
 /// 文節ごとに保持する途中経路の数
 const BEAM_WIDTH: usize = 50;
 /// 文節ごとに返す候補の最大数（ひらがな・カタカナは別に足す）
@@ -37,6 +39,9 @@ pub struct Conversion {
 
 pub struct Engine {
     dict: Dictionary,
+    /// 半角数字の並びに付ける品詞。辞書で「0」を引いて得る（suzuri-dictgen が数として登録している）。
+    /// 見つからなければ未知語の品詞を使う
+    number_id: u16,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -71,7 +76,8 @@ impl Lattice<'_> {
 
 impl Engine {
     pub fn new(dict: Dictionary) -> Self {
-        Engine { dict }
+        let number_id = dict.lookup("0").first().map_or(dict.unknown_id(), |e| e.lid);
+        Engine { dict, number_id }
     }
 
     pub fn dictionary(&self) -> &Dictionary {
@@ -180,16 +186,23 @@ impl Engine {
                 cost: UNKNOWN_COST,
                 entry: None,
             });
-            // 英数字の並び（「UI」「MP3」）は辞書にないので、まとめて1語にする
-            if chars[start].is_ascii_alphanumeric() && (start == 0 || !chars[start - 1].is_ascii_alphanumeric()) {
-                let end = (start..n).find(|&i| !chars[i].is_ascii_alphanumeric()).unwrap_or(n);
-                if end - start > 1 {
+            // 英数字の並び（「UI」「MP3」「3.14」）は辞書にないので、まとめて1語にする
+            let in_run = |i: usize| in_ascii_run(&chars, i);
+            if in_run(start) && (start == 0 || !in_run(start - 1)) {
+                let end = (start..n).find(|&i| !in_run(i)).unwrap_or(n);
+                // 数字だけなら数の品詞にし、後ろの助数詞（「1000円」）と1文節にまとまるようにする
+                let (id, cost) = if chars[start..end].iter().all(|c| !c.is_ascii_alphabetic()) {
+                    (self.number_id, NUMBER_COST)
+                } else {
+                    (unknown, UNKNOWN_COST)
+                };
+                if end - start > 1 || id != unknown {
                     push(Node {
                         start,
                         end,
-                        lid: unknown,
-                        rid: unknown,
-                        cost: UNKNOWN_COST,
+                        lid: id,
+                        rid: id,
+                        cost,
                         entry: None,
                     });
                 }
@@ -324,7 +337,8 @@ impl Engine {
 
         let reading = lat.slice(range.clone()).to_owned();
         // 英字は辞書で変換せず、書き分けだけを候補にする
-        let variants = ascii_variants(&best);
+        let mut variants = ascii_variants(&best);
+        variants.extend(symbol_variants(&best));
         let mut candidates = Vec::new();
         let mut seen = HashSet::new();
         for s in [best].into_iter().chain(variants) {
@@ -353,6 +367,16 @@ impl Engine {
             candidates,
         }
     }
+}
+
+/// 1語にまとめる英数字の並びに入る文字か。数字に挟まれた「.」「,」も含める（「3.14」「1,000」）
+fn in_ascii_run(chars: &[char], i: usize) -> bool {
+    let c = chars[i];
+    if c.is_ascii_alphanumeric() {
+        return true;
+    }
+    let digit = |j: Option<usize>| j.and_then(|j| chars.get(j)).is_some_and(|c| c.is_ascii_digit());
+    (c == '.' || c == ',') && digit(i.checked_sub(1)) && digit(Some(i + 1))
 }
 
 /// 文節の候補を作る途中の経路
@@ -484,6 +508,21 @@ mod tests {
         assert_eq!(c.segments[0].candidates, ["UI", "ui", "Ui", "ＵＩ"]);
         let c = e.convert("A", &UserHistory::default());
         assert_eq!(c.segments[0].candidates, ["A", "a", "Ａ"]);
+    }
+
+    #[test]
+    fn keeps_decimal_number_as_one_word() {
+        let e = engine();
+        let c = e.convert("3.14を1,000", &UserHistory::default());
+        let readings: Vec<&str> = c.segments.iter().map(|s| s.reading.as_str()).collect();
+        assert_eq!(readings, ["3.14を", "1,000"]);
+    }
+
+    #[test]
+    fn lists_symbol_variants() {
+        let e = engine();
+        let c = e.convert("。", &UserHistory::default());
+        assert_eq!(c.segments[0].candidates, ["。", ".", "．"]);
     }
 
     #[test]

@@ -81,6 +81,11 @@ fn main() -> Result<()> {
         }
     }
 
+    for entry in number_entries(&pos)? {
+        builder.add_entry(entry);
+        count += 1;
+    }
+
     let bytes = builder.build()?;
     // 書き出す前に、読み込めることを確かめる
     Dictionary::from_bytes(bytes.clone())?;
@@ -199,6 +204,25 @@ fn apply_segmenter(builder: &mut DictionaryBuilder, text: &str, pos: &[String]) 
         builder.set_boundary(id, 0, true);
     }
     Ok(())
+}
+
+/// 半角数字1文字のコスト。Mozc の「いち → 1」（753）と同じくらいにする
+const DIGIT_COST: i16 = 700;
+
+/// 半角数字 0〜9 の単語。ローマ字入力ではそのまま入るが、Mozc の辞書の読みはかなだけなので、数として足す。
+/// エンジンはこの品詞を、数字の並び（「1000」「3.14」）をまとめた語にも使う
+fn number_entries(pos: &[String]) -> Result<Vec<RawEntry>> {
+    let name = "名詞,数,アラビア数字,*,*,*,*";
+    let id = pos.iter().position(|p| p == name).ok_or(format!("{name} が id.def にありません"))? as u16;
+    Ok(('0'..='9')
+        .map(|c| RawEntry {
+            reading: c.to_string(),
+            lid: id,
+            rid: id,
+            cost: DIGIT_COST,
+            surface: c.to_string(),
+        })
+        .collect())
 }
 
 /// 「読み TAB 左文脈ID TAB 右文脈ID TAB コスト TAB 表記」。6列目以降は使わない

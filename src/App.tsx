@@ -146,7 +146,7 @@ export default function App() {
 
   const type = (ch: string) => {
     const s = sessionRef.current;
-    const r = feed(s.pending, ch);
+    const r = feed(s.pending, ch, Array.from(s.kana)[s.caret - 1]);
     if (r.kana === "") {
       update({ ...s, pending: r.pending });
       return;
