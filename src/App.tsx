@@ -469,7 +469,7 @@ export default function App() {
           {segments ? (
             <>
               <MouseIcon part="wheel" /> 候補{SEP}
-              <MouseIcon part="left" drag /> ピンで区切り{SEP}
+              <MouseIcon part="left" drag /> 文節の区切りを移動{SEP}
               <MouseIcon part="right" /> ピン追加・削除{SEP}
               Ctrl+
               <MouseIcon part="wheel" /> スクロール
