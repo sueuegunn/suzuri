@@ -121,17 +121,18 @@ export default function App() {
     engine.commit(text, segments, modeRef.current === "paste");
   };
 
-  const convert = () => {
-    const s = settle(sessionRef.current);
-    if (s.kana === "") return;
-    update(s);
-    run(s.kana, null, engine.convert(s.kana));
-  };
-
-  /** 変換後にひらがなを直したとき、直した文節だけ区切り直す */
+  /**
+   * ひらがなを直したら、打つそばから変換する（ライブ変換）。
+   * 変換済みなら直した文節だけ区切り直し、ほかの文節の区切りと選んだ候補は保つ
+   */
   const edit = (old: Session, next: Session, pos: number, removed: number, inserted: number) => {
-    if (!old.segments || next.kana === "") {
+    if (next.kana === "") {
       update({ ...next, segments: null });
+      return;
+    }
+    if (!old.segments) {
+      update(next);
+      run(next.kana, null, engine.convert(next.kana));
       return;
     }
     update(next);
@@ -162,11 +163,15 @@ export default function App() {
     saveMode(next);
   };
 
-  /** Shift を押しながら打った英字。ローマ字にせず、そのまま入れる */
+  /**
+   * Shift を押しながら打った英字。ローマ字にせず、そのまま入れる。
+   * 空文字なら、打ちかけのローマ字（末尾の n など）を確定させるだけ
+   */
   const typeLetter = (ch: string) => {
     const s = sessionRef.current;
-    // 打ちかけのローマ字（末尾の n など）は先に確定させる
+    // 打ちかけのローマ字は先に確定させる
     const text = flush(s.pending) + ch;
+    if (text === "") return;
     const inserted = length(text);
     const next = { ...s, kana: splice(s.kana, s.caret, 0, text), caret: s.caret + inserted, pending: "" };
     edit(s, next, s.caret, 0, inserted);
@@ -297,8 +302,8 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
-  const handlers = useRef({ type, typeLetter, backspace, convert, commit, cancel, moveCaret, toggleMode });
-  handlers.current = { type, typeLetter, backspace, convert, commit, cancel, moveCaret, toggleMode };
+  const handlers = useRef({ type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode });
+  handlers.current = { type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode };
 
   useEffect(() => {
     const unlisten = listen<"new" | "previous">("summon", (e) => {
@@ -312,7 +317,6 @@ export default function App() {
       // OS の IME が動いているときの打鍵は扱わない
       if (e.isComposing || e.key === "Process" || e.ctrlKey || e.metaKey || e.altKey) return;
       const h = handlers.current;
-      const s = sessionRef.current;
       switch (e.key) {
         case "Escape":
           h.cancel();
@@ -324,7 +328,8 @@ export default function App() {
           h.toggleMode();
           break;
         case " ":
-          if (!s.segments) h.convert();
+          // 打つそばから変換しているので、Space は打ちかけのローマ字を確定させるだけ
+          h.typeLetter("");
           break;
         case "Backspace":
           h.backspace();
@@ -475,7 +480,7 @@ export default function App() {
               <MouseIcon part="wheel" /> スクロール
             </>
           ) : (
-            `Esc: 閉じる${SEP}Space: 変換`
+            "Esc: 閉じる"
           )}
         </div>
         <div className={"mode " + mode}>
