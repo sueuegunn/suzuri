@@ -16,7 +16,7 @@
         "label": "overlay",
         "title": "スズリ",
         "width": 900,
-        "height": 280,
+        "height": 560,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
