@@ -1,7 +1,7 @@
 :root {
   /* macOS の明るい外観に寄せた配色 */
-  --bg: rgba(250, 250, 252, 0.97);
-  --fg: #1d1d1f;
+  --bg: rgba(250, 250, 252, 0.86);
+  --fg: #48484a;
   --muted: #86868b;
   --accent: #007aff;
   --divider: #c7c7cc;
@@ -39,6 +39,7 @@ body {
   flex-direction: column;
   padding: 28px 32px 18px;
   background: var(--bg);
+  border-radius: 28px;
   /* 横方向と縦方向のぼかしを重ね、角も丸く溶けるようにする */
   mask-image:
     linear-gradient(to right, transparent 0, rgba(0, 0, 0, 0.15) 3px, rgba(0, 0, 0, 0.5) 6px, rgba(0, 0, 0, 0.85) 9px, #000 12px, #000 calc(100% - 12px), rgba(0, 0, 0, 0.85) calc(100% - 9px), rgba(0, 0, 0, 0.5) calc(100% - 6px), rgba(0, 0, 0, 0.15) calc(100% - 3px), transparent 100%),
