@@ -202,6 +202,43 @@ body {
   color: #636366;
 }
 
+/* 案内のマウスの絵。文字と同じ高さにそろえる */
+.mouse {
+  width: auto;
+  height: 1.6em;
+  vertical-align: -0.45em;
+}
+
+.mouse .line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+
+.mouse .wheel {
+  fill: var(--bg);
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.mouse .hl {
+  fill: var(--accent);
+  stroke: none;
+}
+
+/* キーの形の枠 */
+.key {
+  display: inline-block;
+  min-width: 1em;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+  line-height: 1.3;
+  text-align: center;
+}
+
 /* Enter で何が起きるかは、確定の直前に必ず目に入るよう目立たせる */
 .mode {
   flex: none;

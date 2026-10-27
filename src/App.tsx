@@ -466,16 +466,40 @@ export default function App() {
       )}
       <div className="footer">
         <div className="hint">
-          {segments
-            ? "ホイール: 候補 / ピンをドラッグ: 区切り / 右クリック: ピン追加・削除 / Ctrl+ホイール: スクロール"
-            : "Esc: 閉じる   /   Space: 変換"}
+          {segments ? (
+            <>
+              <MouseIcon part="wheel" /> 候補{SEP}
+              <MouseIcon part="left" />↔ ピンで区切り{SEP}
+              <MouseIcon part="right" /> ピン追加・削除{SEP}
+              Ctrl+
+              <MouseIcon part="wheel" /> スクロール
+            </>
+          ) : (
+            `Esc: 閉じる${SEP}Space: 変換`
+          )}
         </div>
         <div className={"mode " + mode}>
-          Enter: {mode === "paste" ? "貼り付け" : "コピー"}
+          <kbd className="key">↵</kbd> {mode === "paste" ? "貼り付け" : "コピー"}
           <span className="mode-key">Tab で切り替え</span>
         </div>
       </div>
     </div>
+  );
+}
+
+/** 案内の項目の区切り */
+const SEP = "   /   ";
+
+/** マウスの絵。使うボタンかホイールを色付けする */
+function MouseIcon({ part }: { part: "left" | "right" | "wheel" }) {
+  return (
+    <svg className="mouse" viewBox="0 0 12 18" aria-hidden="true">
+      {part === "left" && <path className="hl" d="M6 0.75A5.25 5.25 0 0 0 0.75 6V7.5H6Z" />}
+      {part === "right" && <path className="hl" d="M6 0.75A5.25 5.25 0 0 1 11.25 6V7.5H6Z" />}
+      <rect className="line" x="0.75" y="0.75" width="10.5" height="16.5" rx="5.25" />
+      <path className="line" d="M0.75 7.5H11.25M6 0.75V7.5" />
+      <rect className={part === "wheel" ? "hl wheel" : "wheel"} x="4.6" y="2.4" width="2.8" height="3.8" rx="1.4" />
+    </svg>
   );
 }
 
