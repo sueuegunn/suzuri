@@ -297,11 +297,17 @@ export default function App() {
     // 枠外をクリックしたら閉じる。内容は「前回」として残る
     const onBlur = () => handlers.current.cancel();
     const noMenu = (e: MouseEvent) => e.preventDefault();
+    // ホイールは候補の切り替え専用にし、スクロールはさせない（スクロールはスクロールバーで行う）。
+    // React の onWheel は passive で止められないため、ここで止める
+    const noWheelScroll = (e: WheelEvent) => e.preventDefault();
+    const body = bodyRef.current!;
+    body.addEventListener("wheel", noWheelScroll, { passive: false });
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
     window.addEventListener("contextmenu", noMenu);
     return () => {
       unlisten.then((f) => f());
+      body.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("contextmenu", noMenu);
