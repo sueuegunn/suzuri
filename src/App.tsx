@@ -132,6 +132,16 @@ export default function App() {
     edit(s, next, s.caret, 0, inserted);
   };
 
+  /** Shift を押しながら打った英字。ローマ字にせず、そのまま入れる */
+  const typeLetter = (ch: string) => {
+    const s = sessionRef.current;
+    // 打ちかけのローマ字（末尾の n など）は先に確定させる
+    const text = flush(s.pending) + ch;
+    const inserted = length(text);
+    const next = { ...s, kana: splice(s.kana, s.caret, 0, text), caret: s.caret + inserted, pending: "" };
+    edit(s, next, s.caret, 0, inserted);
+  };
+
   const backspace = () => {
     const s = sessionRef.current;
     if (s.pending !== "") {
@@ -257,8 +267,8 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
-  const handlers = useRef({ type, backspace, convert, commit, cancel, moveCaret });
-  handlers.current = { type, backspace, convert, commit, cancel, moveCaret };
+  const handlers = useRef({ type, typeLetter, backspace, convert, commit, cancel, moveCaret });
+  handlers.current = { type, typeLetter, backspace, convert, commit, cancel, moveCaret };
 
   useEffect(() => {
     const unlisten = listen<"new" | "previous">("summon", (e) => {
@@ -300,7 +310,9 @@ export default function App() {
           break;
         default:
           if (e.key.length !== 1) return;
-          h.type(e.key);
+          // CapsLock の状態によらず、Shift を押しているかで英字かローマ字かを決める
+          if (e.shiftKey && /^[a-z]$/i.test(e.key)) h.typeLetter(e.key.toUpperCase());
+          else h.type(e.key);
       }
       e.preventDefault();
     };

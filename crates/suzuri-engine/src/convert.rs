@@ -10,7 +10,7 @@ use std::ops::Range;
 
 use crate::dict::Dictionary;
 use crate::history::UserHistory;
-use crate::kana::hiragana_to_katakana;
+use crate::kana::{ascii_variants, hiragana_to_katakana};
 
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
 const UNKNOWN_COST: i32 = 20_000;
@@ -164,6 +164,7 @@ impl Engine {
         let mut by_start = vec![Vec::new(); n + 1];
         let mut by_end = vec![Vec::new(); n + 1];
         let unknown = self.dict.unknown_id();
+        let chars: Vec<char> = reading.chars().collect();
         for start in 0..n {
             let mut push = |node: Node| {
                 by_start[node.start].push(nodes.len());
@@ -179,6 +180,20 @@ impl Engine {
                 cost: UNKNOWN_COST,
                 entry: None,
             });
+            // 英数字の並び（「UI」「MP3」）は辞書にないので、まとめて1語にする
+            if chars[start].is_ascii_alphanumeric() && (start == 0 || !chars[start - 1].is_ascii_alphanumeric()) {
+                let end = (start..n).find(|&i| !chars[i].is_ascii_alphanumeric()).unwrap_or(n);
+                if end - start > 1 {
+                    push(Node {
+                        start,
+                        end,
+                        lid: unknown,
+                        rid: unknown,
+                        cost: UNKNOWN_COST,
+                        entry: None,
+                    });
+                }
+            }
             self.dict
                 .common_prefix_search(&reading[offsets[start]..], |len, entries| {
                     let end = offsets
@@ -308,8 +323,15 @@ impl Engine {
         finals.sort();
 
         let reading = lat.slice(range.clone()).to_owned();
-        let mut candidates = vec![best];
-        let mut seen: HashSet<String> = candidates.iter().cloned().collect();
+        // 英字は辞書で変換せず、書き分けだけを候補にする
+        let variants = ascii_variants(&best);
+        let mut candidates = Vec::new();
+        let mut seen = HashSet::new();
+        for s in [best].into_iter().chain(variants) {
+            if seen.insert(s.clone()) {
+                candidates.push(s);
+            }
+        }
         for (_, s) in finals {
             if candidates.len() >= MAX_CANDIDATES {
                 break;
@@ -450,6 +472,18 @@ mod tests {
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
         let c = e.resegment("わたしははしをわたる", &[2], 4..10, &UserHistory::default());
         assert_eq!(c.segments[0].end, 2);
+    }
+
+    #[test]
+    fn keeps_ascii_run_as_one_word() {
+        let e = engine();
+        let c = e.convert("NPMをわたる", &UserHistory::default());
+        assert_eq!(view(&c), [(0, 4, "NPMを"), (4, 7, "渡る")]);
+        assert_eq!(&c.segments[0].candidates[..4], ["NPMを", "npmを", "Npmを", "ＮＰＭを"]);
+        let c = e.convert("UI", &UserHistory::default());
+        assert_eq!(c.segments[0].candidates, ["UI", "ui", "Ui", "ＵＩ"]);
+        let c = e.convert("A", &UserHistory::default());
+        assert_eq!(c.segments[0].candidates, ["A", "a", "Ａ"]);
     }
 
     #[test]
