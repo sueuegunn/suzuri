@@ -495,7 +495,7 @@ const SEP = "   /   ";
  * `drag` なら左右に矢印を付け、押したまま横に動かすことを表す */
 function MouseIcon({ part, drag = false }: { part: "left" | "right" | "wheel"; drag?: boolean }) {
   // 矢印を付けるときは、マウスを右にずらして左右に場所をあける
-  const x = drag ? 6 : 0;
+  const x = drag ? 8 : 0;
   return (
     <svg className="mouse" viewBox={`0 0 ${12 + x * 2} 15`} aria-hidden="true">
       <g transform={`translate(${x} 0)`}>
@@ -505,7 +505,7 @@ function MouseIcon({ part, drag = false }: { part: "left" | "right" | "wheel"; d
         <path className="line" d="M0.75 9H11.25M6 0.75V9" />
         <rect className={part === "wheel" ? "hl wheel" : "wheel"} x="4.3" y="2.5" width="3.4" height="4.2" rx="1.7" />
       </g>
-      {drag && <path className="line" d="M4 5L1 7.5L4 10M20 5L23 7.5L20 10" />}
+      {drag && <path className="line" d="M1 7.5H6.5M3.5 5L1 7.5L3.5 10M21.5 7.5H27M24.5 5L27 7.5L24.5 10" />}
     </svg>
   );
 }
