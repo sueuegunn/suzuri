@@ -469,7 +469,7 @@ export default function App() {
           {segments ? (
             <>
               <MouseIcon part="wheel" /> 候補{SEP}
-              <MouseIcon part="left" />↔ ピンで区切り{SEP}
+              <MouseIcon part="left" drag /> ピンで区切り{SEP}
               <MouseIcon part="right" /> ピン追加・削除{SEP}
               Ctrl+
               <MouseIcon part="wheel" /> スクロール
@@ -491,15 +491,21 @@ export default function App() {
 const SEP = "   /   ";
 
 /** マウスの絵。使うボタンかホイールを色付けする。
- * 操作に使うボタンとホイールを大きく見せるため、下の胴の部分は短くしている */
-function MouseIcon({ part }: { part: "left" | "right" | "wheel" }) {
+ * 操作に使うボタンとホイールを大きく見せるため、下の胴の部分は短くしている。
+ * `drag` なら左右に矢印を付け、押したまま横に動かすことを表す */
+function MouseIcon({ part, drag = false }: { part: "left" | "right" | "wheel"; drag?: boolean }) {
+  // 矢印を付けるときは、マウスを右にずらして左右に場所をあける
+  const x = drag ? 6 : 0;
   return (
-    <svg className="mouse" viewBox="0 0 12 15" aria-hidden="true">
-      {part === "left" && <path className="hl" d="M6 0.75A5.25 5.25 0 0 0 0.75 6V9H6Z" />}
-      {part === "right" && <path className="hl" d="M6 0.75A5.25 5.25 0 0 1 11.25 6V9H6Z" />}
-      <rect className="line" x="0.75" y="0.75" width="10.5" height="13.5" rx="5.25" />
-      <path className="line" d="M0.75 9H11.25M6 0.75V9" />
-      <rect className={part === "wheel" ? "hl wheel" : "wheel"} x="4.3" y="2.3" width="3.4" height="5" rx="1.7" />
+    <svg className="mouse" viewBox={`0 0 ${12 + x * 2} 15`} aria-hidden="true">
+      <g transform={`translate(${x} 0)`}>
+        {part === "left" && <path className="hl" d="M6 0.75A5.25 5.25 0 0 0 0.75 6V9H6Z" />}
+        {part === "right" && <path className="hl" d="M6 0.75A5.25 5.25 0 0 1 11.25 6V9H6Z" />}
+        <rect className="line" x="0.75" y="0.75" width="10.5" height="13.5" rx="5.25" />
+        <path className="line" d="M0.75 9H11.25M6 0.75V9" />
+        <rect className={part === "wheel" ? "hl wheel" : "wheel"} x="4.3" y="2.5" width="3.4" height="4.2" rx="1.7" />
+      </g>
+      {drag && <path className="line" d="M4 5L1 7.5L4 10M20 5L23 7.5L20 10" />}
     </svg>
   );
 }
@@ -507,9 +513,9 @@ function MouseIcon({ part }: { part: "left" | "right" | "wheel" }) {
 /** Enter キーの絵。JIS 配列の縦長で L 字型のキーに、改行の矢印を入れる */
 function EnterIcon() {
   return (
-    <svg className="enter" viewBox="0 0 16 18" aria-hidden="true">
-      <path className="line" d="M1 1H15V17H5.5V8.5H1Z" />
-      <path className="line" d="M12 4.5V12.5H8M9.8 10.7L8 12.5L9.8 14.3" />
+    <svg className="enter" viewBox="0 0 24 18" aria-hidden="true">
+      <path className="line" d="M1 1H23V17H8V8.5H1Z" />
+      <path className="line" d="M19 4.5V12.5H11M12.8 10.7L11 12.5L12.8 14.3" />
     </svg>
   );
 }

@@ -211,6 +211,8 @@ body {
 
 .mouse .line {
   fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   stroke: currentColor;
   stroke-width: 1.2;
 }
