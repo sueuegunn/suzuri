@@ -22,6 +22,8 @@ import {
 const WHEEL_STEP = 50;
 /** ホイールを止めてから候補一覧を消すまで */
 const CANDIDATE_LIST_MS = 1500;
+/** 行単位のホイールで Ctrl+スクロールするときの1行の高さ */
+const WHEEL_LINE_PX = 40;
 /** 候補一覧に並べる数 */
 const CANDIDATE_LIST_SIZE = 9;
 
@@ -176,6 +178,8 @@ export default function App() {
   };
 
   const onWheel = (index: number, e: React.WheelEvent) => {
+    // Ctrl+ホイールはスクロールに使う
+    if (e.ctrlKey) return;
     // 行単位・ページ単位のホイールは1回で1候補、ピクセル単位は量をまとめて送る
     if (e.deltaMode !== 0) {
       cycle(index, Math.sign(e.deltaY));
@@ -297,9 +301,14 @@ export default function App() {
     // 枠外をクリックしたら閉じる。内容は「前回」として残る
     const onBlur = () => handlers.current.cancel();
     const noMenu = (e: MouseEvent) => e.preventDefault();
-    // ホイールは候補の切り替え専用にし、スクロールはさせない（スクロールはスクロールバーで行う）。
-    // React の onWheel は passive で止められないため、ここで止める
-    const noWheelScroll = (e: WheelEvent) => e.preventDefault();
+    // ホイールは候補の切り替えに使い、スクロールは Ctrl+ホイールかスクロールバーで行う。
+    // React の onWheel は passive で止められないため、ここで止める。Ctrl+ホイールの拡大縮小も止まる
+    const noWheelScroll = (e: WheelEvent) => {
+      e.preventDefault();
+      if (!e.ctrlKey) return;
+      const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? body.clientHeight : 1;
+      body.scrollTop += e.deltaY * unit;
+    };
     const body = bodyRef.current!;
     body.addEventListener("wheel", noWheelScroll, { passive: false });
     window.addEventListener("keydown", onKey);
