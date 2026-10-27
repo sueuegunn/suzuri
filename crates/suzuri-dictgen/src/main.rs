@@ -40,6 +40,14 @@ const FILES: &[(&str, &str)] = &[
 /// 辞書にない文字に割り当てる品詞
 const UNKNOWN_POS: &str = "名詞,一般,*,*,*,*,*";
 
+/// Mozc の segmenter.def より優先する規則（書式は segmenter.def と同じ）。
+/// Mozc は数字と助数詞を別の文節にして後から書き換えるが、スズリは書き換えを持たないので、
+/// 「3時」「第2」「15」のような数のまとまりを1文節にしておく
+const SEGMENTER_OVERRIDES: &str = "名詞,数 名詞,数 false
+名詞,数 名詞,接尾 false
+接頭詞,数接続 名詞,数 false
+";
+
 fn main() -> Result<()> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let out_dir = std::env::args()
@@ -62,7 +70,8 @@ fn main() -> Result<()> {
     let mut builder = DictionaryBuilder::new(pos_count, unknown_id);
 
     apply_connection(&mut builder, &read("src/data/dictionary_oss/connection_single_column.txt")?, pos.len())?;
-    apply_segmenter(&mut builder, &read("src/data/rules/segmenter.def")?, &pos)?;
+    let segmenter = format!("{SEGMENTER_OVERRIDES}{}", read("src/data/rules/segmenter.def")?);
+    apply_segmenter(&mut builder, &segmenter, &pos)?;
     let mut count = 0;
     for i in 0..10 {
         let text = read(&format!("src/data/dictionary_oss/dictionary{i:02}.txt"))?;
@@ -210,4 +219,34 @@ fn parse_dictionary(text: &str) -> Result<Vec<RawEntry>> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn earlier_segmenter_rule_wins() {
+        let pos: Vec<String> = [
+            "BOS/EOS,*,*,*,*,*,*",
+            "名詞,数,アラビア数字,*,*,*,*",
+            "名詞,数,漢数字,*,*,*,*",
+            "名詞,接尾,助数詞,*,*,*,時",
+            "名詞,一般,*,*,*,*,*",
+            "接頭詞,数接続,*,*,*,*,*",
+        ]
+        .map(String::from)
+        .to_vec();
+        let mozc = "名詞,数,漢数字 名詞,数,アラビア数字 true\n名詞,数 名詞,接尾,助数詞 true\n";
+        let mut b = DictionaryBuilder::new(pos.len() as u16, 4);
+        apply_segmenter(&mut b, &format!("{SEGMENTER_OVERRIDES}{mozc}"), &pos).unwrap();
+        let d = Dictionary::from_bytes(b.build().unwrap()).unwrap();
+        // 数のまとまりは区切らない
+        assert!(!d.is_boundary(2, 1));
+        assert!(!d.is_boundary(1, 3));
+        // 規則のない組み合わせと文頭・文末は区切る
+        assert!(d.is_boundary(3, 4));
+        assert!(d.is_boundary(0, 1));
+        assert!(d.is_boundary(1, 0));
+    }
 }

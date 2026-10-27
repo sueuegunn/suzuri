@@ -6,3 +6,4 @@
 /src-tauri/gen/
 /src-tauri/resources/suzuri.dict
 /src-tauri/resources/THIRD_PARTY_LICENSES.txt
+*.tsbuildinfo
