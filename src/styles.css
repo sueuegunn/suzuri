@@ -5,9 +5,10 @@
   --accent: #e0a040;
   --hover: rgba(255, 255, 255, 0.07);
   --active: rgba(224, 160, 64, 0.16);
-  /* 仮名も漢字も同じ幅の正方形に収まる等幅の書体を優先する。
+  /* 英数字は読みやすい Verdana（Windows・macOS とも標準）。Verdana にない日本語は、
+     仮名も漢字も同じ幅の正方形に収まる等幅の書体で出す。
      BIZ UDゴシックは Windows 10 以降に標準で入っている。macOS は Osaka−等幅 */
-  font-family: "BIZ UDGothic", "BIZ UDゴシック", "Osaka-Mono", "Osaka−等幅", "MS Gothic", monospace;
+  font-family: Verdana, "BIZ UDGothic", "BIZ UDゴシック", "Osaka-Mono", "Osaka−等幅", "MS Gothic", sans-serif;
   color: var(--fg);
 }
 
