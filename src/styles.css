@@ -220,13 +220,13 @@ body {
 .grabber {
   position: absolute;
   z-index: 3;
-  top: 13px;
+  top: 17px;
   left: 50%;
   width: 56px;
   height: 14px;
   margin-left: -28px;
   border-radius: 7px;
-  background: var(--divider);
+  background: #a5a5aa;
   cursor: move;
 }
 
