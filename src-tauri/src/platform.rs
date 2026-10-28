@@ -81,7 +81,7 @@ pub fn is_foreground(caller: Caller) -> bool {
     }
 }
 
-/// 貼り付けのキー（Windows は Ctrl+V、macOS は Cmd+V）を送る。
+/// 貼り付けのキー（Windows は Ctrl+V、macOS は Cmd+V）を送る。メインスレッドから呼ぶこと。
 /// macOS ではシステム設定の「アクセシビリティ」でスズリを許可しておく必要がある
 pub fn send_paste() -> Result<(), String> {
     let modifier = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };

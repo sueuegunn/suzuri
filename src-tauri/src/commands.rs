@@ -92,13 +92,22 @@ pub fn commit(
         .filter(|&c| paste && written.is_ok() && platform::return_focus(&app, c));
     overlay::hide(&app);
     if let Some(caller) = caller {
+        let main = app.clone();
+        // 待つのは別スレッドで行い、メインスレッドを止めない
         thread::spawn(move || {
             thread::sleep(PASTE_DELAY);
-            // 待っている間に前面が別のウィンドウに変わっていたら送らない
-            if !platform::is_foreground(caller) {
-                return;
-            }
-            if let Err(e) = platform::send_paste() {
+            // キーの送信はメインスレッドで行う。macOS では、キーボード配列から「v」のキーを調べる
+            // 入力ソースの API がメインスレッド以外から呼ばれると、アプリが強制終了する
+            let sent = main.run_on_main_thread(move || {
+                // 待っている間に前面が別のウィンドウに変わっていたら送らない
+                if !platform::is_foreground(caller) {
+                    return;
+                }
+                if let Err(e) = platform::send_paste() {
+                    eprintln!("貼り付けのキーを送れません: {e}");
+                }
+            });
+            if let Err(e) = sent {
                 eprintln!("貼り付けのキーを送れません: {e}");
             }
         });
