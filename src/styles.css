@@ -38,6 +38,14 @@ body {
   height: 100%;
 }
 
+/* ウィンドウの縁とパネルの間の透明な余白。大きさを変える掴みどころを、見た目の縁より外まで広げる */
+.frame {
+  position: relative;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 8px;
+}
+
 /* 縁から 12px かけて透明へ溶かす。影を重ねるのではなくパネル自体の不透明度を変えるので、
    不透明な部分との境目ができない。不透明度は端でなだらかに変わる曲線にしている */
 .panel {
@@ -208,52 +216,63 @@ body {
   text-align: right;
 }
 
-/* 上の余白の中央に出す、動かすための掴みどころ。見えない余白だけだと、どこを掴めばよいかわからない */
+/* 上の余白の中央に常に出す、動かすための掴みどころ。灰色のカプセルに「=」の2本線を入れる */
 .grabber {
   position: absolute;
-  z-index: 2;
-  top: 0;
+  z-index: 3;
+  top: 12px;
   left: 50%;
-  width: 120px;
-  height: 26px;
-  margin-left: -60px;
+  width: 48px;
+  height: 16px;
+  margin-left: -24px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.07);
   cursor: move;
 }
 
 .grabber::after {
   content: "";
   position: absolute;
-  top: 11px;
-  left: 40px;
-  width: 40px;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--divider);
+  top: 5px;
+  left: 16px;
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--muted);
+  box-shadow: 0 4px 0 var(--muted);
+}
+
+.grabber:hover {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .grabber:hover::after {
-  background: var(--muted);
+  background: var(--fg);
+  box-shadow: 0 4px 0 var(--fg);
 }
 
-/* 大きさを変える掴みどころ。縁のぼかし（12px）の上に置く */
+/* 大きさを変える掴みどころ。外の余白（8px）と縁のぼかしの内側 10px にまたがる */
 .resize {
   position: absolute;
   z-index: 2;
+  /* Windows の透明なウィンドウは、完全に透明なところのクリックを後ろのアプリに渡してしまう。
+     目に見えないほどわずかに色を付け、掴みどころのクリックを受け取る */
+  background: rgba(0, 0, 0, 0.01);
 }
 
 .resize.n,
 .resize.s {
-  left: 20px;
-  right: 20px;
-  height: 10px;
+  left: 28px;
+  right: 28px;
+  height: 18px;
   cursor: ns-resize;
 }
 
 .resize.w,
 .resize.e {
-  top: 20px;
-  bottom: 20px;
-  width: 10px;
+  top: 28px;
+  bottom: 28px;
+  width: 18px;
   cursor: ew-resize;
 }
 
@@ -266,8 +285,8 @@ body {
 .resize.ne,
 .resize.sw,
 .resize.se {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
 }
 
 .resize.nw { top: 0; left: 0; cursor: nwse-resize; }

@@ -12,8 +12,9 @@ use crate::settings::WindowGeometry;
 use crate::{AppState, platform};
 
 const LABEL: &str = "overlay";
-/// 手で大きさを変えていないときの大きさ（論理ピクセル）
-const DEFAULT_SIZE: LogicalSize<f64> = LogicalSize::new(900.0, 560.0);
+/// 手で大きさを変えていないときの大きさ（論理ピクセル）。
+/// 見えるパネルは 900×560 で、まわりに大きさを変える掴みどころ用の透明な余白が 8px ずつある
+const DEFAULT_SIZE: LogicalSize<f64> = LogicalSize::new(916.0, 576.0);
 /// 覚えた位置に出すとき、ウィンドウの左上からこれだけ内側がどこかのモニターに入っていることを求める。
 /// モニターを外したあとに、画面の外へ出てしまわないようにする
 const VISIBLE_MARGIN: i32 = 80;

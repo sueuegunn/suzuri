@@ -475,67 +475,70 @@ export default function App() {
 
   const segments = session.segments;
   return (
-    <div className="panel" ref={panelRef} onPointerDown={startMove}>
+    <div className="frame">
       <ResizeHandles />
-      <div className="grabber" title="ドラッグで移動" />
-      <div className="area reading-area" ref={bodyRef}>
-        <div className="reading">
-          {segments
-            ? segments.map((seg, i) => (
-                <Fragment key={`${seg.start}:${seg.end}`}>
-                  {i > 0 && (
-                    <span
-                      className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
-                      title="ドラッグで区切りを移動、右クリックで削除"
-                      onPointerDown={(e) => e.button === 0 && e.currentTarget.setPointerCapture(e.pointerId)}
-                      onPointerMove={(e) => onPinMove(i - 1, e)}
-                      onPointerUp={() => onPinUp(i - 1)}
-                      onContextMenu={() => removePin(i - 1)}
-                    />
-                  )}
-                  <span className={segClass(i)} {...segHandlers(i)}>
-                    {chars(seg.reading, seg.start, i === segments.length - 1)}
-                  </span>
-                </Fragment>
-              ))
-            : chars(session.kana, 0, true)}
+      {/* 上の縁の掴みどころより手前に出すため、パネルの外に置く */}
+      <div className="grabber" title="ドラッグで移動" onPointerDown={startMove} />
+      <div className="panel" ref={panelRef} onPointerDown={startMove}>
+        <div className="area reading-area" ref={bodyRef}>
+          <div className="reading">
+            {segments
+              ? segments.map((seg, i) => (
+                  <Fragment key={`${seg.start}:${seg.end}`}>
+                    {i > 0 && (
+                      <span
+                        className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
+                        title="ドラッグで区切りを移動、右クリックで削除"
+                        onPointerDown={(e) => e.button === 0 && e.currentTarget.setPointerCapture(e.pointerId)}
+                        onPointerMove={(e) => onPinMove(i - 1, e)}
+                        onPointerUp={() => onPinUp(i - 1)}
+                        onContextMenu={() => removePin(i - 1)}
+                      />
+                    )}
+                    <span className={segClass(i)} {...segHandlers(i)}>
+                      {chars(seg.reading, seg.start, i === segments.length - 1)}
+                    </span>
+                  </Fragment>
+                ))
+              : chars(session.kana, 0, true)}
+          </div>
+          {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
         </div>
-        {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
-      </div>
-      <div className="area result-area">
-        {segments?.map((seg, i) => (
-          <span
-            key={`${seg.start}:${seg.end}`}
-            className={segClass(i)}
-            ref={(el) => {
-              resultRefs.current[i] = el;
-            }}
-            {...segHandlers(i)}
-          >
-            {seg.candidates[seg.selected]}
-          </span>
-        ))}
-      </div>
-      {segments && listFor !== null && segments[listFor] && (
-        <CandidateList segment={segments[listFor]} anchor={() => resultRefs.current[listFor]} />
-      )}
-      <div className="footer">
-        <div className="hint">
-          {segments ? (
-            <>
-              <MouseIcon part="wheel" /> 候補{SEP}
-              <MouseIcon part="left" drag /> 文節の区切りを移動{SEP}
-              <MouseIcon part="right" /> ピン追加・削除{SEP}
-              Ctrl+
-              <MouseIcon part="wheel" /> スクロール
-            </>
-          ) : (
-            "Esc: 閉じる"
-          )}
+        <div className="area result-area">
+          {segments?.map((seg, i) => (
+            <span
+              key={`${seg.start}:${seg.end}`}
+              className={segClass(i)}
+              ref={(el) => {
+                resultRefs.current[i] = el;
+              }}
+              {...segHandlers(i)}
+            >
+              {seg.candidates[seg.selected]}
+            </span>
+          ))}
         </div>
-        <div className={"mode " + mode}>
-          <EnterIcon /> {mode === "paste" ? "貼り付け" : "コピー"}
-          <span className="mode-key">Tab で切り替え</span>
+        {segments && listFor !== null && segments[listFor] && (
+          <CandidateList segment={segments[listFor]} anchor={() => resultRefs.current[listFor]} />
+        )}
+        <div className="footer">
+          <div className="hint">
+            {segments ? (
+              <>
+                <MouseIcon part="wheel" /> 候補{SEP}
+                <MouseIcon part="left" drag /> 文節の区切りを移動{SEP}
+                <MouseIcon part="right" /> ピン追加・削除{SEP}
+                Ctrl+
+                <MouseIcon part="wheel" /> スクロール
+              </>
+            ) : (
+              "Esc: 閉じる"
+            )}
+          </div>
+          <div className={"mode " + mode}>
+            <EnterIcon /> {mode === "paste" ? "貼り付け" : "コピー"}
+            <span className="mode-key">Tab で切り替え</span>
+          </div>
         </div>
       </div>
     </div>
@@ -593,7 +596,7 @@ function dragWindow(start: () => Promise<void>) {
 function startMove(e: React.PointerEvent<HTMLElement>) {
   if (e.button !== 0) return;
   const target = e.target as HTMLElement;
-  if (target !== e.currentTarget && !target.closest(".footer, .grabber")) return;
+  if (target !== e.currentTarget && !target.closest(".footer")) return;
   e.preventDefault();
   dragWindow(() => getCurrentWindow().startDragging());
 }
@@ -611,7 +614,10 @@ const RESIZE_EDGES: { dir: ResizeDirection; className: string }[] = [
   { dir: "SouthEast", className: "se" },
 ];
 
-/** 縁のぼかしの部分に置く、大きさを変えるための掴みどころ。枠のないウィンドウは OS の縁がないため */
+/**
+ * 大きさを変えるための掴みどころ。枠のないウィンドウは OS の縁がないため。
+ * パネルの外の透明な余白と、パネルの縁のぼかしにまたがって置き、見た目の縁より少し外を押しても掴めるようにする
+ */
 function ResizeHandles() {
   return (
     <>
