@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { settings, type LetterCase } from "./engine";
+import { settings, type Appearance, type LetterCase } from "./engine";
 import { label, record, type Bindings } from "./shortcut";
 
 const MAC = /Mac/i.test(navigator.userAgent);
@@ -14,18 +14,30 @@ const CASES: { value: LetterCase; title: string }[] = [
   { value: "lower", title: "小文字" },
 ];
 
+/** 見た目の設定の項目。範囲は Rust 側の Appearance と合わせる */
+const SLIDERS: { key: keyof Appearance; title: string; min: number; max: number; step: number }[] = [
+  { key: "textScale", title: "文字の大きさ", min: 70, max: 200, step: 10 },
+  { key: "opacity", title: "背景の不透明度", min: 30, max: 100, step: 2 },
+];
+
+/** つまみを動かしている間は保存せず、止めてからまとめて保存する */
+const APPEARANCE_SAVE_MS = 300;
+
 /** トレイの「設定…」から開くウィンドウ。ショートカットを押して記録する */
 export default function Settings() {
   const [bindings, setBindings] = useState<Bindings | null>(null);
   const [recording, setRecording] = useState<keyof Bindings | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [letterCase, setLetterCase] = useState<LetterCase | null>(null);
+  const [appearance, setAppearance] = useState<Appearance | null>(null);
+  const appearanceTimer = useRef<number | undefined>(undefined);
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
 
   useEffect(() => {
     settings.get().then(setBindings);
     settings.getLetterCase().then(setLetterCase);
+    settings.getAppearance().then(setAppearance);
   }, []);
 
   const stop = () => {
@@ -56,6 +68,14 @@ export default function Settings() {
     } catch (e) {
       setMessage({ text: String(e), error: true });
     }
+  };
+
+  const changeAppearance = (next: Appearance) => {
+    setAppearance(next);
+    window.clearTimeout(appearanceTimer.current);
+    appearanceTimer.current = window.setTimeout(() => {
+      settings.setAppearance(next).catch((e) => setMessage({ text: String(e), error: true }));
+    }, APPEARANCE_SAVE_MS);
   };
 
   useEffect(() => {
@@ -123,6 +143,24 @@ export default function Settings() {
           ))}
         </div>
       </div>
+      <h1>見た目</h1>
+      {SLIDERS.map(({ key, title, min, max, step }) => (
+        <div className="settings-row" key={key}>
+          <span>{title}</span>
+          <span>
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={appearance?.[key] ?? min}
+              disabled={!appearance || recording !== null}
+              onChange={(e) => appearance && changeAppearance({ ...appearance, [key]: Number(e.target.value) })}
+            />
+            <span className="range-value">{appearance ? `${appearance[key]}%` : ""}</span>
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

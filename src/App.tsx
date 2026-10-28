@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { engine, settings, type LetterCase } from "./engine";
+import { applyAppearance, engine, settings, type Appearance, type LetterCase } from "./engine";
 import { feed, flush } from "./romaji";
 import {
   boundariesOf,
@@ -327,9 +327,13 @@ export default function App() {
   const letterCaseRef = useRef<LetterCase>("upper");
   useEffect(() => {
     settings.getLetterCase().then((c) => (letterCaseRef.current = c));
-    const unlisten = listen<LetterCase>("letter-case", (e) => (letterCaseRef.current = e.payload));
+    settings.getAppearance().then(applyAppearance);
+    const unlisten = [
+      listen<LetterCase>("letter-case", (e) => (letterCaseRef.current = e.payload)),
+      listen<Appearance>("appearance", (e) => applyAppearance(e.payload)),
+    ];
     return () => {
-      unlisten.then((f) => f());
+      unlisten.forEach((u) => u.then((f) => f()));
     };
   }, []);
 

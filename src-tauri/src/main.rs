@@ -41,7 +41,7 @@ fn open_settings(app: &tauri::AppHandle) {
     }
     let built = tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App("index.html#settings".into()))
         .title("スズリの設定")
-        .inner_size(460.0, 400.0)
+        .inner_size(460.0, 480.0)
         .resizable(false)
         .center()
         .build();
@@ -167,6 +167,8 @@ fn main() {
             commands::resume_shortcuts,
             commands::get_letter_case,
             commands::set_letter_case,
+            commands::get_appearance,
+            commands::set_appearance,
         ])
         .run(tauri::generate_context!())
         .expect("スズリを起動できません");

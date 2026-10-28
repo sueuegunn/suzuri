@@ -7,6 +7,9 @@ import type { Bindings } from "./shortcut";
 /** Shift を押しながら打った英字を、大文字と小文字のどちらで入れるか */
 export type LetterCase = "upper" | "lower";
 
+/** オーバーレイの見た目。どちらも百分率 */
+export type Appearance = { textScale: number; opacity: number };
+
 export type Committed = { reading: string; surface: string; wasFirst: boolean };
 
 export const engine = {
@@ -29,4 +32,14 @@ export const settings = {
   getLetterCase: () => invoke<LetterCase>("get_letter_case"),
   /** 変えるとオーバーレイに "letter-case" イベントで知らせる */
   setLetterCase: (letterCase: LetterCase) => invoke<void>("set_letter_case", { letterCase }),
+  getAppearance: () => invoke<Appearance>("get_appearance"),
+  /** 範囲に収めた値を返す。変えるとオーバーレイに "appearance" イベントで知らせる */
+  setAppearance: (appearance: Appearance) => invoke<Appearance>("set_appearance", { appearance }),
 };
+
+/** 見た目の設定を CSS の変数に反映する */
+export function applyAppearance(a: Appearance) {
+  const root = document.documentElement.style;
+  root.setProperty("--text-scale", String(a.textScale / 100));
+  root.setProperty("--bg-alpha", String(a.opacity / 100));
+}

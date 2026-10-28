@@ -8,7 +8,7 @@ use suzuri_engine::{Committed, Conversion};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-use crate::settings::LetterCase;
+use crate::settings::{Appearance, LetterCase};
 use crate::shortcuts::Bindings;
 use crate::{AppState, overlay, platform};
 
@@ -158,6 +158,20 @@ pub fn set_letter_case(app: AppHandle, state: State<'_, AppState>, letter_case: 
     state.settings.update(|f| f.letter_case = letter_case)?;
     let _ = app.emit("letter-case", letter_case);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_appearance(state: State<'_, AppState>) -> Appearance {
+    state.settings.get().appearance
+}
+
+/// 文字の大きさと背景の不透明度を変えて保存し、オーバーレイに知らせる。範囲外の値は範囲に収める
+#[tauri::command]
+pub fn set_appearance(app: AppHandle, state: State<'_, AppState>, appearance: Appearance) -> Result<Appearance, String> {
+    let appearance = appearance.clamped();
+    state.settings.update(|f| f.appearance = appearance)?;
+    let _ = app.emit("appearance", appearance);
+    Ok(appearance)
 }
 
 /// 設定画面でキーを記録する間、ショートカットの登録を外す
