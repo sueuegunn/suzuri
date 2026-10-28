@@ -18,10 +18,13 @@ import {
   type Session,
 } from "./session";
 
-/** ホイールの何ピクセル分で候補を1つ送るか（トラックパッドの細かい量をまとめる） */
+/**
+ * ホイールの何ピクセル分で候補を1つ送るか（トラックパッドの細かい量をまとめる）。
+ * これ以上の量が1回で来たら、マウスのホイールの1目盛りとみなして1つだけ送る
+ */
 const WHEEL_STEP = 50;
-/** ホイールを止めてから候補一覧を消すまで */
-const CANDIDATE_LIST_MS = 1500;
+/** これだけ止まっていたら、まとめかけのホイールの量を捨てる */
+const WHEEL_IDLE_MS = 300;
 /** 行単位のホイールで Ctrl+スクロールするときの1行の高さ */
 const WHEEL_LINE_PX = 40;
 /** 候補一覧に並べる数 */
@@ -63,8 +66,7 @@ export default function App() {
   const previousRef = useRef<Session>(emptySession);
   const requestRef = useRef(0);
   const [listFor, setListFor] = useState<number | null>(null);
-  const listTimer = useRef<number | undefined>(undefined);
-  const wheelAcc = useRef(0);
+  const wheel = useRef({ acc: 0, index: -1, at: 0 });
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>(loadMode);
@@ -234,24 +236,30 @@ export default function App() {
       return { ...seg, selected: (seg.selected + step + n) % n };
     });
     update({ ...s, segments });
+    // 一覧は文節からマウスが離れるまで出しておく
     setListFor(index);
-    window.clearTimeout(listTimer.current);
-    listTimer.current = window.setTimeout(() => setListFor(null), CANDIDATE_LIST_MS);
   };
 
   const onWheel = (index: number, e: React.WheelEvent) => {
     // Ctrl+ホイールはスクロールに使う
     if (e.ctrlKey) return;
     // 行単位・ページ単位のホイールは1回で1候補、ピクセル単位は量をまとめて送る
-    if (e.deltaMode !== 0) {
-      cycle(index, Math.sign(e.deltaY));
+    const w = wheel.current;
+    const now = performance.now();
+    // 前の操作の残りは捨てる。残すと、逆に回したときに打ち消し合って候補が動かないことがある
+    if (index !== w.index || now - w.at > WHEEL_IDLE_MS || Math.sign(e.deltaY) !== Math.sign(w.acc)) w.acc = 0;
+    w.index = index;
+    w.at = now;
+    // 目盛りのあるホイールは、1目盛りの量が画面の拡大率で変わるため、1回で1つだけ送る
+    if (e.deltaMode !== 0 || Math.abs(e.deltaY) >= WHEEL_STEP) {
+      w.acc = 0;
+      if (e.deltaY !== 0) cycle(index, Math.sign(e.deltaY));
       return;
     }
-    wheelAcc.current += e.deltaY;
-    const steps = Math.trunc(wheelAcc.current / WHEEL_STEP);
-    if (steps !== 0) {
-      wheelAcc.current -= steps * WHEEL_STEP;
-      cycle(index, steps);
+    w.acc += e.deltaY;
+    if (Math.abs(w.acc) >= WHEEL_STEP) {
+      cycle(index, Math.sign(w.acc));
+      w.acc = 0;
     }
   };
 
