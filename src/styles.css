@@ -112,10 +112,15 @@ body {
   }
 }
 
+/* 掴みやすいよう、見た目の幅（12px）より左右に 5px ずつ広く当たり判定を取る。
+   広げた分は負の余白で打ち消し、文字の並びは変えない */
 .pin {
   position: relative;
+  z-index: 1;
   display: inline-block;
   width: 12px;
+  padding: 0 5px;
+  margin: 0 -5px;
   height: 1.3em;
   vertical-align: -0.25em;
   cursor: ew-resize;
@@ -127,7 +132,7 @@ body {
   content: "";
   position: absolute;
   top: -6px;
-  left: 2px;
+  left: 7px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -139,7 +144,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 5px;
+  left: 10px;
   width: 2px;
   background: var(--accent);
   opacity: 0.6;
