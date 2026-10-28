@@ -18,6 +18,28 @@ pub enum LetterCase {
     Lower,
 }
 
+/// 画面の配色。トレイメニューの「外観」で選ぶ
+#[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Theme {
+    /// OS の設定に合わせる
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl Theme {
+    /// ウィンドウの枠やメニューに渡す値。None は OS に合わせる
+    pub fn to_tauri(self) -> Option<tauri::Theme> {
+        match self {
+            Theme::System => None,
+            Theme::Light => Some(tauri::Theme::Light),
+            Theme::Dark => Some(tauri::Theme::Dark),
+        }
+    }
+}
+
 /// オーバーレイの見た目。どちらも百分率
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -76,6 +98,7 @@ pub struct SettingsFile {
     pub shortcuts: Bindings,
     pub letter_case: LetterCase,
     pub appearance: Appearance,
+    pub theme: Theme,
     /// 手で動かしていなければ None。そのときはマウスのあるモニターの中央に出す
     pub window_position: Option<WindowPosition>,
     /// 手で大きさを変えていなければ None。そのときは既定の大きさで出す

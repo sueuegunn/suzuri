@@ -8,7 +8,7 @@ use suzuri_engine::{Committed, Conversion};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-use crate::settings::{Appearance, LetterCase};
+use crate::settings::{Appearance, LetterCase, Theme};
 use crate::shortcuts::Bindings;
 use crate::{AppState, overlay, platform};
 
@@ -158,6 +158,11 @@ pub fn set_letter_case(app: AppHandle, state: State<'_, AppState>, letter_case: 
     state.settings.update(|f| f.letter_case = letter_case)?;
     let _ = app.emit("letter-case", letter_case);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_theme(state: State<'_, AppState>) -> Theme {
+    state.settings.get().theme
 }
 
 #[tauri::command]

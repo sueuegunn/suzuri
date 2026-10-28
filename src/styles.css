@@ -14,6 +14,16 @@
   --seg-line: rgba(0, 104, 214, 0.4);
   --seg-line-odd: rgba(224, 131, 0, 0.5);
   --popover: #ffffff;
+  --popover-border: rgba(0, 0, 0, 0.08);
+  --shadow: rgba(0, 0, 0, 0.16);
+  --grabber: #a5a5aa;
+  --hint: #636366;
+  --window-bg: #f5f5f7;
+  --button-bg: #ffffff;
+  --ok: #34a853;
+  --error: #d93025;
+  /* スクロールバーやつまみなど、ブラウザが描く部品の配色 */
+  color-scheme: light;
   /* 文節の区切りのピン。文節の下線（青・オレンジ）とも文字のグレーとも見分けられる赤紫（Okabe-Ito の配色） */
   --pin: #cc79a7;
   /* 英数字は読みやすい Verdana（Windows・macOS とも標準）。Verdana にない日本語は、
@@ -21,6 +31,31 @@
      BIZ UDゴシックは Windows 10 以降に標準で入っている。macOS は Osaka−等幅 */
   font-family: Verdana, "BIZ UDGothic", "BIZ UDゴシック", "Osaka-Mono", "Osaka−等幅", "MS Gothic", sans-serif;
   color: var(--fg);
+}
+
+/* ダーク。トレイメニューの「外観」か OS の設定で、theme.ts が data-theme="dark" を付ける。
+   macOS の暗い外観に寄せ、下線とピンは同じ色相のまま暗い背景で沈まないよう明るくする */
+:root[data-theme="dark"] {
+  --bg: rgba(30, 30, 32, var(--bg-alpha));
+  --fg: #d1d1d6;
+  --muted: #8e8e93;
+  --accent: #0a84ff;
+  --divider: #48484a;
+  --hover: rgba(255, 255, 255, 0.07);
+  --active: rgba(10, 132, 255, 0.28);
+  --seg-line: rgba(64, 156, 255, 0.65);
+  --seg-line-odd: rgba(255, 159, 10, 0.65);
+  --popover: #2c2c2e;
+  --popover-border: rgba(255, 255, 255, 0.1);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --pin: #e08dbd;
+  --grabber: #636366;
+  --hint: #aeaeb2;
+  --window-bg: #1c1c1e;
+  --button-bg: #2c2c2e;
+  --ok: #30d158;
+  --error: #ff453a;
+  color-scheme: dark;
 }
 
 html,
@@ -196,9 +231,9 @@ body {
   padding: 4px;
   list-style: none;
   background: var(--popover);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--popover-border);
   border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 6px 24px var(--shadow);
   font-size: calc(18px * var(--text-scale));
   white-space: pre;
 }
@@ -229,7 +264,7 @@ body {
   height: 11px;
   margin-left: -28px;
   border-radius: 5.5px;
-  background: #a5a5aa;
+  background: var(--grabber);
   cursor: move;
 }
 
@@ -292,7 +327,7 @@ body {
   /* 区切りの空白を詰めずに出す */
   white-space: pre;
   font-size: 12px;
-  color: #636366;
+  color: var(--hint);
 }
 
 /* 案内のマウスの絵。文字と同じ高さにそろえる */
@@ -359,7 +394,7 @@ body {
 
 /* 設定ウィンドウ。オーバーレイと違い、普通の不透明なウィンドウ */
 body.settings-body {
-  background: #f5f5f7;
+  background: var(--window-bg);
   user-select: none;
 }
 
@@ -383,7 +418,7 @@ body.settings-body {
 .settings button {
   font: inherit;
   color: var(--fg);
-  background: #ffffff;
+  background: var(--button-bg);
   border: 1px solid var(--divider);
   border-radius: 8px;
   padding: 6px 12px;
@@ -410,11 +445,11 @@ body.settings-body {
   min-height: 1.5em;
   margin: 4px 0 12px;
   font-size: 13px;
-  color: #34a853;
+  color: var(--ok);
 }
 
 .settings-message.error {
-  color: #d93025;
+  color: var(--error);
 }
 
 .settings-actions {

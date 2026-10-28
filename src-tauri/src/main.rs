@@ -13,7 +13,8 @@ use std::sync::{Arc, Mutex};
 use suzuri_engine::Engine;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
-use tauri::Manager;
+use settings::Theme;
+use tauri::{Emitter, Manager};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::path::BaseDirectory;
 use tauri::tray::TrayIconBuilder;
@@ -32,6 +33,16 @@ pub struct AppState {
 }
 
 const SETTINGS_LABEL: &str = "settings";
+const THEME_MENU_PREFIX: &str = "theme_";
+
+fn theme_menu_id(theme: Theme) -> String {
+    let name = match theme {
+        Theme::System => "system",
+        Theme::Light => "light",
+        Theme::Dark => "dark",
+    };
+    format!("{THEME_MENU_PREFIX}{name}")
+}
 
 /// 設定ウィンドウを開く。開いていれば前に出す。必要なときだけ作り、閉じたら破棄する
 fn open_settings(app: &tauri::AppHandle) {
@@ -91,6 +102,9 @@ fn main() {
                 shortcuts,
             });
 
+            let theme = app.state::<AppState>().settings.get().theme;
+            app.handle().set_theme(theme.to_tauri());
+
             for e in app.state::<AppState>().shortcuts.register(app.handle()) {
                 eprintln!("ショートカットを登録できません: {e}");
             }
@@ -111,12 +125,24 @@ fn main() {
                 app.autolaunch().is_enabled().unwrap_or(false),
                 None::<&str>,
             )?;
+            // 3つから1つを選ぶ。チェックは選んだときに付け直す
+            let themes = [
+                (Theme::System, "OS に合わせる"),
+                (Theme::Light, "ライト"),
+                (Theme::Dark, "ダーク"),
+            ]
+            .into_iter()
+            .map(|(t, label)| {
+                CheckMenuItem::with_id(app, theme_menu_id(t), label, true, t == theme, None::<&str>).map(|item| (t, item))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+            let appearance = Submenu::with_items(app, "外観", true, &[&themes[0].1, &themes[1].1, &themes[2].1])?;
             let settings = MenuItem::with_id(app, "settings", "設定…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().ok_or("アイコンがありません")?)
                 .tooltip("スズリ")
-                .menu(&Menu::with_items(app, &[&open, &settings, &autostart, &reset, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &settings, &appearance, &autostart, &reset, &quit])?)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
                         // トレイから開いたときは戻り先がないので、貼り付けはしない
@@ -139,6 +165,19 @@ fn main() {
                         let _ = autostart.set_checked(launcher.is_enabled().unwrap_or(false));
                     }
                     "settings" => open_settings(app),
+                    id if id.starts_with(THEME_MENU_PREFIX) => {
+                        let Some(&(theme, _)) = themes.iter().find(|(t, _)| theme_menu_id(*t) == id) else {
+                            return;
+                        };
+                        for (t, item) in &themes {
+                            let _ = item.set_checked(*t == theme);
+                        }
+                        if let Err(e) = app.state::<AppState>().settings.update(|f| f.theme = theme) {
+                            eprintln!("{e}");
+                        }
+                        app.set_theme(theme.to_tauri());
+                        let _ = app.emit("theme", theme);
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -170,6 +209,7 @@ fn main() {
             commands::resume_shortcuts,
             commands::get_letter_case,
             commands::set_letter_case,
+            commands::get_theme,
             commands::get_appearance,
             commands::set_appearance,
             commands::reset_window_geometry,
