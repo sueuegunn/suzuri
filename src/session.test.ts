@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carrySelections, clampPin, rangeAround, shiftBoundaries, splice } from "./session";
+import { carrySelections, clampPin, rangeAround, retypeRange, shiftBoundaries, splice } from "./session";
 
 describe("shiftBoundaries", () => {
   it("adds text typed at a boundary to the left segment", () => {
@@ -20,6 +20,17 @@ describe("rangeAround", () => {
   });
   it("covers both sides when deleting at a boundary", () => {
     expect(rangeAround([4, 9], 4, 4, 12)).toEqual([0, 9]);
+  });
+});
+
+describe("retypeRange", () => {
+  it("also covers the previous segment", () => {
+    // 「くるま|で」の末尾に打ったときは「くるまで…」をまとめて区切り直す
+    expect(retypeRange([3], [], 4, 5, 5)).toEqual([0, 5]);
+    expect(retypeRange([4, 9], [], 10, 11, 11)).toEqual([4, 11]);
+  });
+  it("does not cross a pinned boundary", () => {
+    expect(retypeRange([4, 9], [9], 10, 11, 11)).toEqual([9, 11]);
   });
 });
 

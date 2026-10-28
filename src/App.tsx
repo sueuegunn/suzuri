@@ -8,7 +8,7 @@ import {
   clampPin,
   emptySession,
   length,
-  rangeAround,
+  retypeRange,
   resultText,
   shiftBoundaries,
   shiftPosition,
@@ -127,18 +127,21 @@ export default function App() {
    */
   const edit = (old: Session, next: Session, pos: number, removed: number, inserted: number) => {
     if (next.kana === "") {
-      update({ ...next, segments: null });
+      update({ ...next, segments: null, pinned: [] });
       return;
     }
     if (!old.segments) {
+      next = { ...next, pinned: [] };
       update(next);
       run(next.kana, null, engine.convert(next.kana));
       return;
     }
-    update(next);
     const n = length(next.kana);
     const boundaries = shiftBoundaries(boundariesOf(old.segments), pos, removed, inserted, n);
-    const [start, end] = rangeAround(boundaries, pos, pos + inserted, n);
+    const pinned = shiftBoundaries(old.pinned, pos, removed, inserted, n);
+    next = { ...next, pinned };
+    update(next);
+    const [start, end] = retypeRange(boundaries, pinned, pos, pos + inserted, n);
     run(next.kana, old.segments, engine.resegment(next.kana, boundaries, start, end), (x) =>
       shiftPosition(x, pos, removed, inserted),
     );
@@ -193,9 +196,11 @@ export default function App() {
     update({ ...s, caret: Math.max(0, Math.min(length(s.kana), to(s))) });
   };
 
-  const setBoundaries = (boundaries: number[]) => {
+  /** 手で区切りを変えたとき。`pinned` は手で決めた区切りの新しい一覧 */
+  const setBoundaries = (boundaries: number[], pinned: number[]) => {
     const s = sessionRef.current;
     if (!s.segments) return;
+    update({ ...s, pinned });
     run(s.kana, s.segments, engine.convertWithBoundaries(s.kana, boundaries));
   };
 
@@ -204,13 +209,20 @@ export default function App() {
     if (!s.segments) return;
     const bs = boundariesOf(s.segments);
     if (gap <= 0 || gap >= length(s.kana) || bs.includes(gap)) return;
-    setBoundaries([...bs, gap].sort((a, b) => a - b));
+    setBoundaries(
+      [...bs, gap].sort((a, b) => a - b),
+      [...s.pinned, gap],
+    );
   };
 
   const removePin = (index: number) => {
     const s = sessionRef.current;
     if (!s.segments) return;
-    setBoundaries(boundariesOf(s.segments).filter((_, i) => i !== index));
+    const bs = boundariesOf(s.segments);
+    setBoundaries(
+      bs.filter((_, i) => i !== index),
+      s.pinned.filter((p) => p !== bs[index]),
+    );
   };
 
   const cycle = (index: number, step: number) => {
@@ -289,8 +301,9 @@ export default function App() {
     if (drag && drag.pin === pin && s.segments) {
       const bs = boundariesOf(s.segments);
       if (bs[pin] !== drag.target) {
+        const pinned = [...s.pinned.filter((p) => p !== bs[pin]), drag.target];
         bs[pin] = drag.target;
-        setBoundaries(bs);
+        setBoundaries(bs, pinned);
       }
     }
     setDrag(null);

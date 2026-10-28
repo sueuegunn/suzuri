@@ -22,9 +22,11 @@ export type Session = {
   pending: string;
   /** 変換前は null */
   segments: Segment[] | null;
+  /** ユーザーが手で置いた・動かした区切り。打っている途中に区切り直さない */
+  pinned: number[];
 };
 
-export const emptySession: Session = { kana: "", caret: 0, pending: "", segments: null };
+export const emptySession: Session = { kana: "", caret: 0, pending: "", segments: null, pinned: [] };
 
 export function length(text: string): number {
   return Array.from(text).length;
@@ -64,6 +66,23 @@ export function rangeAround(boundaries: number[], from: number, to: number, n: n
   const start = Math.max(0, ...boundaries.filter((b) => b < from));
   const end = Math.min(n, ...boundaries.filter((b) => b >= to && b > from));
   return [start, end];
+}
+
+/**
+ * 打ったときに区切り直す範囲。直した文節に加えて、1つ前の文節も含める。
+ * 打っている途中は語の切れ目が決まりきらず（「くるま」の時点で区切ると「車｜で」と割れる）、
+ * 前の文節とつなぎ直せるようにするため。ただし手で置いた区切りは越えない
+ */
+export function retypeRange(
+  boundaries: number[],
+  pinned: number[],
+  from: number,
+  to: number,
+  n: number,
+): [number, number] {
+  const [start, end] = rangeAround(boundaries, from, to, n);
+  if (start === 0 || pinned.includes(start)) return [start, end];
+  return [Math.max(0, ...boundaries.filter((b) => b < start)), end];
 }
 
 /** ひらがなを直す前の文字位置を、直したあとの位置に読み替える */
