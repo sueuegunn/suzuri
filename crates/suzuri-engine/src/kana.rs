@@ -10,7 +10,7 @@ pub fn hiragana_to_katakana(text: &str) -> String {
         .collect()
 }
 
-/// 英字の書き分けの候補（小文字・先頭だけ大文字・全角）。英字を含まなければ空
+/// 英字の書き分けの候補（大文字・小文字・先頭だけ大文字・全角）。英字を含まなければ空
 pub fn ascii_variants(text: &str) -> Vec<String> {
     if !text.chars().any(|c| c.is_ascii_alphabetic()) {
         return Vec::new();
@@ -33,7 +33,7 @@ pub fn ascii_variants(text: &str) -> Vec<String> {
             _ => c,
         })
         .collect();
-    vec![text.to_ascii_lowercase(), capitalized, full_width]
+    vec![text.to_ascii_uppercase(), text.to_ascii_lowercase(), capitalized, full_width]
 }
 
 /// 記号の書き分けの候補。ローマ字入力で日本語の記号になるものは元の半角と全角を、
@@ -90,8 +90,8 @@ mod tests {
 
     #[test]
     fn lists_ascii_variants() {
-        assert_eq!(ascii_variants("NPMを"), ["npmを", "Npmを", "ＮＰＭを"]);
-        assert_eq!(ascii_variants("MP3"), ["mp3", "Mp3", "ＭＰ３"]);
+        assert_eq!(ascii_variants("NPMを"), ["NPMを", "npmを", "Npmを", "ＮＰＭを"]);
+        assert_eq!(ascii_variants("mp3"), ["MP3", "mp3", "Mp3", "ｍｐ３"]);
         assert!(ascii_variants("123").is_empty());
     }
 

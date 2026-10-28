@@ -332,4 +332,30 @@ body.settings-body {
 .settings-actions {
   display: flex;
   justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+/* 2つから1つを選ぶボタンの組 */
+.segmented {
+  display: flex;
+}
+
+.settings .segmented button {
+  min-width: 80px;
+  border-radius: 0;
+}
+
+.settings .segmented button:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.settings .segmented button:last-child {
+  border-radius: 0 8px 8px 0;
+  border-left: none;
+}
+
+.settings .segmented button.selected {
+  color: #ffffff;
+  background: var(--accent);
+  border-color: var(--accent);
 }

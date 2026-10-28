@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use suzuri_engine::{Committed, Conversion};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+use crate::settings::LetterCase;
 use crate::shortcuts::Bindings;
 use crate::{AppState, overlay, platform};
 
@@ -141,7 +142,22 @@ pub fn get_shortcuts(state: State<'_, AppState>) -> Bindings {
 /// ショートカットを変えて保存する。`bindings` を省くと既定に戻す
 #[tauri::command]
 pub fn set_shortcuts(app: AppHandle, state: State<'_, AppState>, bindings: Option<Bindings>) -> Result<Bindings, String> {
-    state.shortcuts.set(&app, bindings.unwrap_or_default())
+    let bindings = state.shortcuts.set(&app, bindings.unwrap_or_default())?;
+    state.settings.update(|f| f.shortcuts = bindings.clone())?;
+    Ok(bindings)
+}
+
+#[tauri::command]
+pub fn get_letter_case(state: State<'_, AppState>) -> LetterCase {
+    state.settings.get().letter_case
+}
+
+/// Shift+英字の大文字・小文字を変えて保存し、オーバーレイに知らせる
+#[tauri::command]
+pub fn set_letter_case(app: AppHandle, state: State<'_, AppState>, letter_case: LetterCase) -> Result<(), String> {
+    state.settings.update(|f| f.letter_case = letter_case)?;
+    let _ = app.emit("letter-case", letter_case);
+    Ok(())
 }
 
 /// 設定画面でキーを記録する間、ショートカットの登録を外す

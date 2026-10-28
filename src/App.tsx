@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { engine } from "./engine";
+import { engine, settings, type LetterCase } from "./engine";
 import { feed, flush } from "./romaji";
 import {
   boundariesOf,
@@ -315,6 +315,16 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
+  // 打鍵ごとに問い合わせないよう、起動時に読んでおき、設定画面で変えたらイベントで受け取る
+  const letterCaseRef = useRef<LetterCase>("upper");
+  useEffect(() => {
+    settings.getLetterCase().then((c) => (letterCaseRef.current = c));
+    const unlisten = listen<LetterCase>("letter-case", (e) => (letterCaseRef.current = e.payload));
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+
   const handlers = useRef({ type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode });
   handlers.current = { type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode };
 
@@ -363,7 +373,8 @@ export default function App() {
         default:
           if (e.key.length !== 1) return;
           // CapsLock の状態によらず、Shift を押しているかで英字かローマ字かを決める
-          if (e.shiftKey && /^[a-z]$/i.test(e.key)) h.typeLetter(e.key.toUpperCase());
+          if (e.shiftKey && /^[a-z]$/i.test(e.key))
+            h.typeLetter(letterCaseRef.current === "lower" ? e.key.toLowerCase() : e.key.toUpperCase());
           else h.type(e.key);
       }
       e.preventDefault();

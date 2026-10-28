@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { settings } from "./engine";
+import { settings, type LetterCase } from "./engine";
 import { label, record, type Bindings } from "./shortcut";
 
 const MAC = /Mac/i.test(navigator.userAgent);
@@ -9,16 +9,23 @@ const ROWS: { kind: keyof Bindings; title: string }[] = [
   { kind: "previous", title: "前回の状態を直す" },
 ];
 
+const CASES: { value: LetterCase; title: string }[] = [
+  { value: "upper", title: "大文字" },
+  { value: "lower", title: "小文字" },
+];
+
 /** トレイの「設定…」から開くウィンドウ。ショートカットを押して記録する */
 export default function Settings() {
   const [bindings, setBindings] = useState<Bindings | null>(null);
   const [recording, setRecording] = useState<keyof Bindings | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const [letterCase, setLetterCase] = useState<LetterCase | null>(null);
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
 
   useEffect(() => {
     settings.get().then(setBindings);
+    settings.getLetterCase().then(setLetterCase);
   }, []);
 
   const stop = () => {
@@ -37,6 +44,15 @@ export default function Settings() {
     try {
       setBindings(await settings.set(next));
       setMessage({ text: done, error: false });
+    } catch (e) {
+      setMessage({ text: String(e), error: true });
+    }
+  };
+
+  const changeLetterCase = async (next: LetterCase) => {
+    try {
+      await settings.setLetterCase(next);
+      setLetterCase(next);
     } catch (e) {
       setMessage({ text: String(e), error: true });
     }
@@ -90,6 +106,22 @@ export default function Settings() {
         <button onClick={() => save(undefined, "既定に戻しました")} disabled={recording !== null}>
           既定に戻す
         </button>
+      </div>
+      <h1>入力</h1>
+      <div className="settings-row">
+        <span>Shift + 英字</span>
+        <div className="segmented">
+          {CASES.map(({ value, title }) => (
+            <button
+              key={value}
+              className={letterCase === value ? "selected" : ""}
+              onClick={() => changeLetterCase(value)}
+              disabled={recording !== null}
+            >
+              {title}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

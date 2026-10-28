@@ -514,6 +514,9 @@ mod tests {
         assert_eq!(c.segments[0].candidates, ["UI", "ui", "Ui", "ＵＩ"]);
         let c = e.convert("A", &UserHistory::default());
         assert_eq!(c.segments[0].candidates, ["A", "a", "Ａ"]);
+        // 小文字で打ったときも、大文字をホイールで選べる
+        let c = e.convert("npmを", &UserHistory::default());
+        assert_eq!(&c.segments[0].candidates[..4], ["npmを", "NPMを", "Npmを", "ｎｐｍを"]);
     }
 
     #[test]

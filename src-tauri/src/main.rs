@@ -5,6 +5,7 @@ mod commands;
 mod history_store;
 mod overlay;
 mod platform;
+mod settings;
 mod shortcuts;
 
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,7 @@ pub struct AppState {
     pub saver: history_store::Saver,
     /// ショートカットで呼び出す前に前面にあったウィンドウ（貼り付けの戻り先）
     pub caller: Mutex<Option<platform::Caller>>,
+    pub settings: settings::Settings,
     pub shortcuts: shortcuts::Shortcuts,
 }
 
@@ -39,7 +41,7 @@ fn open_settings(app: &tauri::AppHandle) {
     }
     let built = tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App("index.html#settings".into()))
         .title("スズリの設定")
-        .inner_size(460.0, 320.0)
+        .inner_size(460.0, 400.0)
         .resizable(false)
         .center()
         .build();
@@ -75,12 +77,15 @@ fn main() {
             let history_path = data_dir.join("history.tsv");
             let history = Arc::new(Mutex::new(history_store::load(&history_path)));
             let saver = history_store::spawn(history_path, history.clone());
+            let settings = settings::Settings::load(data_dir.join("settings.json"));
+            let shortcuts = shortcuts::Shortcuts::new(settings.get().shortcuts);
             app.manage(AppState {
                 engine: Engine::new(dict),
                 history,
                 saver,
                 caller: Mutex::new(None),
-                shortcuts: shortcuts::Shortcuts::load(data_dir.join("settings.json")),
+                settings,
+                shortcuts,
             });
 
             for e in app.state::<AppState>().shortcuts.register(app.handle()) {
@@ -160,6 +165,8 @@ fn main() {
             commands::set_shortcuts,
             commands::suspend_shortcuts,
             commands::resume_shortcuts,
+            commands::get_letter_case,
+            commands::set_letter_case,
         ])
         .run(tauri::generate_context!())
         .expect("スズリを起動できません");

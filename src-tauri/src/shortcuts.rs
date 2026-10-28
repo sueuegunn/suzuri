@@ -1,8 +1,6 @@
-//! 呼び出しのショートカットの設定と登録。
-//! 設定は settings.json に保存し、変えたらその場で登録し直す。
+//! 呼び出しのショートカットの登録。
+//! 組み合わせは settings.json に保存し（`settings` モジュール）、変えたらその場で登録し直す。
 
-use std::fs;
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
 
@@ -39,15 +37,14 @@ impl Bindings {
     fn parse(&self) -> Result<[Shortcut; 2], String> {
         Ok([parse(&self.new)?, parse(&self.previous)?])
     }
-}
 
-#[derive(Serialize, Deserialize, Default)]
-struct SettingsFile {
-    shortcuts: Bindings,
+    /// 登録できる形で、2つが別の組み合わせになっているか
+    pub fn is_valid(&self) -> bool {
+        self.parse().is_ok() && self.new != self.previous
+    }
 }
 
 pub struct Shortcuts {
-    path: PathBuf,
     bindings: Mutex<Bindings>,
     /// 設定画面でキーを記録している間は登録を外し、押したキーが設定画面に届くようにする
     suspended: Mutex<bool>,
@@ -63,16 +60,8 @@ fn parse(accelerator: &str) -> Result<Shortcut, String> {
 }
 
 impl Shortcuts {
-    /// 設定がない・壊れている・使えない組み合わせが入っているときは既定に戻す。起動は失敗させない
-    pub fn load(path: PathBuf) -> Self {
-        let bindings = fs::read_to_string(&path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<SettingsFile>(&text).ok())
-            .map(|f| f.shortcuts)
-            .filter(|b| b.parse().is_ok() && b.new != b.previous)
-            .unwrap_or_default();
+    pub fn new(bindings: Bindings) -> Self {
         Shortcuts {
-            path,
             bindings: Mutex::new(bindings),
             suspended: Mutex::new(false),
         }
@@ -120,7 +109,7 @@ impl Shortcuts {
         }
     }
 
-    /// 組み合わせを変えて保存する。ほかのアプリが使っているなどで登録できなければ、元に戻してエラーを返す
+    /// 組み合わせを変える。ほかのアプリが使っているなどで登録できなければ、元に戻してエラーを返す
     pub fn set(&self, app: &AppHandle, next: Bindings) -> Result<Bindings, String> {
         let shortcuts = next.parse()?;
         if next.new == next.previous {
@@ -140,21 +129,7 @@ impl Shortcuts {
         if !*self.suspended.lock().unwrap() {
             self.register(app);
         }
-        self.save(&next).map_err(|e| format!("設定を保存できません: {e}"))?;
         Ok(next)
-    }
-
-    fn save(&self, bindings: &Bindings) -> std::io::Result<()> {
-        if let Some(dir) = self.path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        let text = serde_json::to_string_pretty(&SettingsFile {
-            shortcuts: bindings.clone(),
-        })?;
-        // 書きかけで落ちても元の設定を壊さないよう、一時ファイルから置き換える
-        let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, text)?;
-        fs::rename(&tmp, &self.path)
     }
 }
 
