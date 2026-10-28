@@ -268,3 +268,68 @@ body {
   font-size: 11px;
   opacity: 0.7;
 }
+
+/* 設定ウィンドウ。オーバーレイと違い、普通の不透明なウィンドウ */
+body.settings-body {
+  background: #f5f5f7;
+  user-select: none;
+}
+
+.settings {
+  padding: 20px 24px;
+  font-size: 14px;
+}
+
+.settings h1 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.settings button {
+  font: inherit;
+  color: var(--fg);
+  background: #ffffff;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.settings button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.shortcut-field {
+  min-width: 240px;
+  text-align: center;
+}
+
+.shortcut-field.recording {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--active);
+}
+
+.settings-message {
+  min-height: 1.5em;
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: #34a853;
+}
+
+.settings-message.error {
+  color: #d93025;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}

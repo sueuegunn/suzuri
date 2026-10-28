@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutEvent, ShortcutState};
+use tauri_plugin_global_shortcut::{Shortcut, ShortcutEvent, ShortcutState};
 
 use crate::{AppState, platform};
 
@@ -18,35 +18,22 @@ pub enum Mode {
     Previous,
 }
 
-/// [新規入力, 前回の編集]。Alt（macOS は Option）+J。
-/// J は標準のメニューでほぼ使われず、ホームポジションで押せるため選んだ
-pub fn shortcuts() -> [Shortcut; 2] {
-    [
-        Shortcut::new(Some(Modifiers::ALT), Code::KeyJ),
-        Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyJ),
-    ]
-}
-
 pub fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     if event.state() != ShortcutState::Pressed {
         return;
     }
-    let [new, previous] = shortcuts();
-    if *shortcut != new && *shortcut != previous {
+    let state = app.state::<AppState>();
+    let Some(mode) = state.shortcuts.mode_of(shortcut) else {
         return;
-    }
+    };
     // オーバーレイが出ている間に押し直したときは、最初の戻り先を保つ
     let visible = app
         .get_webview_window(LABEL)
         .is_some_and(|w| w.is_visible().unwrap_or(false));
     if !visible {
-        *app.state::<AppState>().caller.lock().unwrap() = platform::caller();
+        *state.caller.lock().unwrap() = platform::caller();
     }
-    if *shortcut == new {
-        show(app, Mode::New);
-    } else if *shortcut == previous {
-        show(app, Mode::Previous);
-    }
+    show(app, mode);
 }
 
 pub fn show(app: &AppHandle, mode: Mode) {

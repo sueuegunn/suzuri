@@ -3318,6 +3318,7 @@ version = "0.1.0"
 dependencies = [
  "enigo",
  "serde",
+ "serde_json",
  "suzuri-engine",
  "tauri",
  "tauri-build",

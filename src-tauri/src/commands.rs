@@ -8,6 +8,7 @@ use suzuri_engine::{Committed, Conversion};
 use tauri::{AppHandle, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+use crate::shortcuts::Bindings;
 use crate::{AppState, overlay, platform};
 
 /// フォーカスを呼び出し元に戻してから貼り付けのキーを送るまでの待ち時間。
@@ -121,4 +122,26 @@ pub fn commit(
 #[tauri::command]
 pub fn cancel(app: AppHandle) {
     overlay::hide(&app);
+}
+
+#[tauri::command]
+pub fn get_shortcuts(state: State<'_, AppState>) -> Bindings {
+    state.shortcuts.bindings()
+}
+
+/// ショートカットを変えて保存する。`bindings` を省くと既定に戻す
+#[tauri::command]
+pub fn set_shortcuts(app: AppHandle, state: State<'_, AppState>, bindings: Option<Bindings>) -> Result<Bindings, String> {
+    state.shortcuts.set(&app, bindings.unwrap_or_default())
+}
+
+/// 設定画面でキーを記録する間、ショートカットの登録を外す
+#[tauri::command]
+pub fn suspend_shortcuts(app: AppHandle, state: State<'_, AppState>) {
+    state.shortcuts.suspend(&app);
+}
+
+#[tauri::command]
+pub fn resume_shortcuts(app: AppHandle, state: State<'_, AppState>) {
+    state.shortcuts.resume(&app);
 }

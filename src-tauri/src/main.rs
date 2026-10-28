@@ -5,6 +5,7 @@ mod commands;
 mod history_store;
 mod overlay;
 mod platform;
+mod shortcuts;
 
 use std::sync::{Arc, Mutex};
 
@@ -16,7 +17,6 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::path::BaseDirectory;
 use tauri::tray::TrayIconBuilder;
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub engine: Engine,
@@ -24,6 +24,31 @@ pub struct AppState {
     pub saver: history_store::Saver,
     /// ショートカットで呼び出す前に前面にあったウィンドウ（貼り付けの戻り先）
     pub caller: Mutex<Option<platform::Caller>>,
+    pub shortcuts: shortcuts::Shortcuts,
+}
+
+const SETTINGS_LABEL: &str = "settings";
+
+/// 設定ウィンドウを開く。開いていれば前に出す。必要なときだけ作り、閉じたら破棄する
+fn open_settings(app: &tauri::AppHandle) {
+    platform::before_show(app);
+    if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let built = tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App("index.html#settings".into()))
+        .title("スズリの設定")
+        .inner_size(460.0, 320.0)
+        .resizable(false)
+        .center()
+        .build();
+    match built {
+        Ok(window) => {
+            let _ = window.set_focus();
+        }
+        Err(e) => eprintln!("設定ウィンドウを開けません: {e}"),
+    }
 }
 
 fn main() {
@@ -46,7 +71,8 @@ fn main() {
                     dict_path.display()
                 )
             })?;
-            let history_path = app.path().app_data_dir()?.join("history.tsv");
+            let data_dir = app.path().app_data_dir()?;
+            let history_path = data_dir.join("history.tsv");
             let history = Arc::new(Mutex::new(history_store::load(&history_path)));
             let saver = history_store::spawn(history_path, history.clone());
             app.manage(AppState {
@@ -54,12 +80,11 @@ fn main() {
                 history,
                 saver,
                 caller: Mutex::new(None),
+                shortcuts: shortcuts::Shortcuts::load(data_dir.join("settings.json")),
             });
 
-            for shortcut in overlay::shortcuts() {
-                if let Err(e) = app.global_shortcut().register(shortcut) {
-                    eprintln!("ショートカット {shortcut} を登録できません: {e}");
-                }
+            for e in app.state::<AppState>().shortcuts.register(app.handle()) {
+                eprintln!("ショートカットを登録できません: {e}");
             }
 
             let open = MenuItem::with_id(app, "open", "開く", true, None::<&str>)?;
@@ -78,11 +103,12 @@ fn main() {
                 app.autolaunch().is_enabled().unwrap_or(false),
                 None::<&str>,
             )?;
+            let settings = MenuItem::with_id(app, "settings", "設定…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().ok_or("アイコンがありません")?)
                 .tooltip("スズリ")
-                .menu(&Menu::with_items(app, &[&open, &autostart, &reset, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &settings, &autostart, &reset, &quit])?)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
                         // トレイから開いたときは戻り先がないので、貼り付けはしない
@@ -104,18 +130,25 @@ fn main() {
                         // チェックは実際の登録状態に合わせる（切り替えに失敗したときも食い違わないように）
                         let _ = autostart.set_checked(launcher.is_enabled().unwrap_or(false));
                     }
+                    "settings" => open_settings(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .build(app)?;
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // Alt+F4 などで閉じられても、隠すだけにして使い回す
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            // オーバーレイは Alt+F4 などで閉じられても、隠すだけにして使い回す
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() != SETTINGS_LABEL => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // キーの記録中に設定ウィンドウを閉じても、ショートカットが外れたままにならないようにする
+            tauri::WindowEvent::Destroyed if window.label() == SETTINGS_LABEL => {
+                let app = window.app_handle();
+                app.state::<AppState>().shortcuts.resume(app);
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::convert,
@@ -123,6 +156,10 @@ fn main() {
             commands::resegment,
             commands::commit,
             commands::cancel,
+            commands::get_shortcuts,
+            commands::set_shortcuts,
+            commands::suspend_shortcuts,
+            commands::resume_shortcuts,
         ])
         .run(tauri::generate_context!())
         .expect("スズリを起動できません");
