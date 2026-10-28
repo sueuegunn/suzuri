@@ -71,6 +71,8 @@ export default function App() {
   const wheel = useRef({ acc: 0, index: -1, at: 0 });
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<number | null>(null);
+  /** 動かす掴みどころにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
+  const [grabberHover, setGrabberHover] = useState(false);
   const [mode, setMode] = useState<Mode>(loadMode);
   const modeRef = useRef(mode);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -482,8 +484,9 @@ export default function App() {
       {/* 上の縁の掴みどころより手前に出すため、パネルの外に置く */}
       <div
         className="grabber"
-        title="ドラッグで移動、ダブルクリックで画面の中央へ"
         onPointerDown={onGrabberDown}
+        onPointerEnter={() => setGrabberHover(true)}
+        onPointerLeave={() => setGrabberHover(false)}
       />
       <div className="panel" ref={panelRef} onPointerDown={startMove}>
         <div className="area reading-area" ref={bodyRef}>
@@ -529,7 +532,12 @@ export default function App() {
         )}
         <div className="footer">
           <div className="hint">
-            {segments ? (
+            {grabberHover ? (
+              <>
+                <MouseIcon part="left" drag /> ドラッグで移動{SEP}
+                <MouseIcon part="left" /> ダブルクリックで中央に戻す
+              </>
+            ) : segments ? (
               <>
                 <MouseIcon part="wheel" /> 候補{SEP}
                 <MouseIcon part="left" drag /> 文節の区切りを移動{SEP}
