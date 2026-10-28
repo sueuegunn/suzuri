@@ -174,6 +174,12 @@ pub fn set_appearance(app: AppHandle, state: State<'_, AppState>, appearance: Ap
     Ok(appearance)
 }
 
+/// 覚えたオーバーレイの位置と大きさを忘れる。次に開くときは既定の大きさで、マウスのあるモニターの中央に出す
+#[tauri::command]
+pub fn reset_window_geometry(state: State<'_, AppState>) -> Result<(), String> {
+    state.settings.update(|f| f.window = None)
+}
+
 /// 設定画面でキーを記録する間、ショートカットの登録を外す
 #[tauri::command]
 pub fn suspend_shortcuts(app: AppHandle, state: State<'_, AppState>) {

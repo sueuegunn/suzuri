@@ -17,7 +17,7 @@ const CASES: { value: LetterCase; title: string }[] = [
 /** 見た目の設定の項目。範囲は Rust 側の Appearance と合わせる */
 const SLIDERS: { key: keyof Appearance; title: string; min: number; max: number; step: number }[] = [
   { key: "textScale", title: "文字の大きさ", min: 70, max: 200, step: 10 },
-  { key: "opacity", title: "背景の不透明度", min: 30, max: 100, step: 2 },
+  { key: "opacity", title: "背景の不透明度", min: 30, max: 100, step: 5 },
 ];
 
 /** つまみを動かしている間は保存せず、止めてからまとめて保存する */
@@ -161,6 +161,20 @@ export default function Settings() {
           </span>
         </div>
       ))}
+      <div className="settings-row">
+        <span>ウィンドウの位置と大きさ</span>
+        <button
+          onClick={() =>
+            settings
+              .resetWindowGeometry()
+              .then(() => setMessage({ text: "位置と大きさを元に戻しました", error: false }))
+              .catch((e) => setMessage({ text: String(e), error: true }))
+          }
+          disabled={recording !== null}
+        >
+          元に戻す
+        </button>
+      </div>
     </div>
   );
 }

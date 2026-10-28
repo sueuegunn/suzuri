@@ -21,7 +21,9 @@
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "resizable": false,
+        "resizable": true,
+        "minWidth": 480,
+        "minHeight": 300,
         "shadow": false,
         "visible": false,
         "focus": true

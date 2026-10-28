@@ -35,6 +35,8 @@ export const settings = {
   getAppearance: () => invoke<Appearance>("get_appearance"),
   /** 範囲に収めた値を返す。変えるとオーバーレイに "appearance" イベントで知らせる */
   setAppearance: (appearance: Appearance) => invoke<Appearance>("set_appearance", { appearance }),
+  /** 覚えたオーバーレイの位置と大きさを忘れる */
+  resetWindowGeometry: () => invoke<void>("reset_window_geometry"),
 };
 
 /** 見た目の設定を CSS の変数に反映する */

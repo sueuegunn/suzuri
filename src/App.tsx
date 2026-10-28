@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyAppearance, engine, settings, type Appearance, type LetterCase } from "./engine";
 import { feed, flush } from "./romaji";
 import {
@@ -465,7 +466,8 @@ export default function App() {
 
   const segments = session.segments;
   return (
-    <div className="panel" ref={panelRef}>
+    <div className="panel" ref={panelRef} onPointerDown={startMove}>
+      <ResizeHandles />
       <div className="area reading-area" ref={bodyRef}>
         <div className="reading">
           {segments
@@ -564,6 +566,51 @@ function EnterIcon() {
 }
 
 /** 下段の文節の下に出す候補一覧。下に入りきらなければ上に出す */
+/**
+ * 余白か下の案内の欄を左ボタンで押さえたら、ウィンドウを動かす。
+ * 文字の上はピンや文節の操作に使うので動かさない。動かした位置は隠すときに Rust 側で覚える
+ */
+function startMove(e: React.PointerEvent<HTMLElement>) {
+  if (e.button !== 0) return;
+  const target = e.target as HTMLElement;
+  if (target !== e.currentTarget && !target.closest(".footer")) return;
+  e.preventDefault();
+  getCurrentWindow().startDragging();
+}
+
+type ResizeDirection = Parameters<ReturnType<typeof getCurrentWindow>["startResizeDragging"]>[0];
+
+const RESIZE_EDGES: { dir: ResizeDirection; className: string }[] = [
+  { dir: "North", className: "n" },
+  { dir: "South", className: "s" },
+  { dir: "West", className: "w" },
+  { dir: "East", className: "e" },
+  { dir: "NorthWest", className: "nw" },
+  { dir: "NorthEast", className: "ne" },
+  { dir: "SouthWest", className: "sw" },
+  { dir: "SouthEast", className: "se" },
+];
+
+/** 縁のぼかしの部分に置く、大きさを変えるための掴みどころ。枠のないウィンドウは OS の縁がないため */
+function ResizeHandles() {
+  return (
+    <>
+      {RESIZE_EDGES.map(({ dir, className }) => (
+        <div
+          key={dir}
+          className={"resize " + className}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            getCurrentWindow().startResizeDragging(dir);
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 function CandidateList({ segment, anchor }: { segment: Segment; anchor: () => HTMLElement | null }) {
   const ref = useRef<HTMLOListElement>(null);
   useLayoutEffect(() => {

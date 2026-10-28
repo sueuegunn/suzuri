@@ -2,7 +2,7 @@
   /* macOS の明るい外観に寄せた配色 */
   /* 文字の大きさと背景の不透明度は設定で変える（applyAppearance） */
   --text-scale: 1;
-  --bg-alpha: 0.86;
+  --bg-alpha: 0.85;
   --bg: rgba(250, 250, 252, var(--bg-alpha));
   --fg: #48484a;
   --muted: #86868b;
@@ -41,6 +41,7 @@ body {
 /* 縁から 12px かけて透明へ溶かす。影を重ねるのではなくパネル自体の不透明度を変えるので、
    不透明な部分との境目ができない。不透明度は端でなだらかに変わる曲線にしている */
 .panel {
+  position: relative;
   box-sizing: border-box;
   height: 100%;
   display: flex;
@@ -206,6 +207,46 @@ body {
   color: var(--muted);
   text-align: right;
 }
+
+/* 大きさを変える掴みどころ。縁のぼかし（12px）の上に置く */
+.resize {
+  position: absolute;
+  z-index: 2;
+}
+
+.resize.n,
+.resize.s {
+  left: 20px;
+  right: 20px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.resize.w,
+.resize.e {
+  top: 20px;
+  bottom: 20px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.resize.n { top: 0; }
+.resize.s { bottom: 0; }
+.resize.w { left: 0; }
+.resize.e { right: 0; }
+
+.resize.nw,
+.resize.ne,
+.resize.sw,
+.resize.se {
+  width: 20px;
+  height: 20px;
+}
+
+.resize.nw { top: 0; left: 0; cursor: nwse-resize; }
+.resize.se { bottom: 0; right: 0; cursor: nwse-resize; }
+.resize.ne { top: 0; right: 0; cursor: nesw-resize; }
+.resize.sw { bottom: 0; left: 0; cursor: nesw-resize; }
 
 .footer {
   display: flex;

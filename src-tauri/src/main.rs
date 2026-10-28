@@ -26,6 +26,8 @@ pub struct AppState {
     /// ショートカットで呼び出す前に前面にあったウィンドウ（貼り付けの戻り先）
     pub caller: Mutex<Option<platform::Caller>>,
     pub settings: settings::Settings,
+    /// オーバーレイを表示したときに置いた位置と大きさ
+    pub placement: Mutex<Option<overlay::Placement>>,
     pub shortcuts: shortcuts::Shortcuts,
 }
 
@@ -41,7 +43,7 @@ fn open_settings(app: &tauri::AppHandle) {
     }
     let built = tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App("index.html#settings".into()))
         .title("スズリの設定")
-        .inner_size(460.0, 480.0)
+        .inner_size(460.0, 520.0)
         .resizable(false)
         .center()
         .build();
@@ -85,6 +87,7 @@ fn main() {
                 saver,
                 caller: Mutex::new(None),
                 settings,
+                placement: Mutex::new(None),
                 shortcuts,
             });
 
@@ -169,6 +172,7 @@ fn main() {
             commands::set_letter_case,
             commands::get_appearance,
             commands::set_appearance,
+            commands::reset_window_geometry,
         ])
         .run(tauri::generate_context!())
         .expect("スズリを起動できません");

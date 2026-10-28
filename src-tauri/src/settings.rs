@@ -32,7 +32,7 @@ impl Default for Appearance {
     fn default() -> Self {
         Appearance {
             text_scale: 100,
-            opacity: 86,
+            opacity: 85,
         }
     }
 }
@@ -41,14 +41,28 @@ impl Appearance {
     pub const TEXT_SCALE: std::ops::RangeInclusive<u32> = 70..=200;
     /// 低すぎると、うしろの文字と重なって読めなくなる
     pub const OPACITY: std::ops::RangeInclusive<u32> = 30..=100;
+    /// 不透明度は 5% 刻みで選ぶ
+    pub const OPACITY_STEP: u32 = 5;
 
-    /// 手で書き換えた設定ファイルでも画面が壊れないよう、範囲に収める
+    /// 手で書き換えた設定ファイルでも画面が壊れないよう、範囲と刻みに収める
     pub fn clamped(self) -> Self {
+        let step = Self::OPACITY_STEP;
+        let opacity = (self.opacity + step / 2) / step * step;
         Appearance {
             text_scale: self.text_scale.clamp(*Self::TEXT_SCALE.start(), *Self::TEXT_SCALE.end()),
-            opacity: self.opacity.clamp(*Self::OPACITY.start(), *Self::OPACITY.end()),
+            opacity: opacity.clamp(*Self::OPACITY.start(), *Self::OPACITY.end()),
         }
     }
+}
+
+/// 手で動かしたオーバーレイの位置と大きさ。
+/// 位置はモニターをまたいだ座標なので物理ピクセル、大きさは拡大率の違うモニターでも同じ見た目になるよう論理ピクセルで持つ
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WindowGeometry {
+    pub x: i32,
+    pub y: i32,
+    pub width: f64,
+    pub height: f64,
 }
 
 /// 項目が欠けていても既定値で補い、古い設定ファイルも読めるようにする
@@ -58,6 +72,8 @@ pub struct SettingsFile {
     pub shortcuts: Bindings,
     pub letter_case: LetterCase,
     pub appearance: Appearance,
+    /// 手で動かしていなければ None。そのときは既定の大きさで、マウスのあるモニターの中央に出す
+    pub window: Option<WindowGeometry>,
 }
 
 pub struct Settings {
@@ -129,5 +145,12 @@ mod tests {
         }
         .clamped();
         assert_eq!((a.text_scale, a.opacity), (200, 30));
+        // 刻みから外れた不透明度（以前の既定の 86 など）は、近い 5% 刻みに丸める
+        let a = Appearance {
+            text_scale: 100,
+            opacity: 86,
+        }
+        .clamped();
+        assert_eq!(a.opacity, 85);
     }
 }
