@@ -12,9 +12,10 @@ use suzuri_engine::Engine;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
 use tauri::Manager;
-use tauri::menu::{Menu, MenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::path::BaseDirectory;
 use tauri::tray::TrayIconBuilder;
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
@@ -28,6 +29,8 @@ pub struct AppState {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        // ログイン時の起動。Windows はレジストリの Run、macOS は LaunchAgent に登録する
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(overlay::on_shortcut)
@@ -67,12 +70,20 @@ fn main() {
                 true,
                 &[&MenuItem::with_id(app, "reset_history", "すべての学習を消す", true, None::<&str>)?],
             )?;
+            let autostart = CheckMenuItem::with_id(
+                app,
+                "autostart",
+                "ログイン時に起動",
+                true,
+                app.autolaunch().is_enabled().unwrap_or(false),
+                None::<&str>,
+            )?;
             let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().ok_or("アイコンがありません")?)
                 .tooltip("スズリ")
-                .menu(&Menu::with_items(app, &[&open, &reset, &quit])?)
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .menu(&Menu::with_items(app, &[&open, &autostart, &reset, &quit])?)
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
                         // トレイから開いたときは戻り先がないので、貼り付けはしない
                         *app.state::<AppState>().caller.lock().unwrap() = None;
@@ -82,6 +93,16 @@ fn main() {
                         let state = app.state::<AppState>();
                         *state.history.lock().unwrap() = UserHistory::default();
                         state.saver.request();
+                    }
+                    "autostart" => {
+                        let launcher = app.autolaunch();
+                        let enabled = launcher.is_enabled().unwrap_or(false);
+                        let result = if enabled { launcher.disable() } else { launcher.enable() };
+                        if let Err(e) = result {
+                            eprintln!("ログイン時の起動を切り替えられません: {e}");
+                        }
+                        // チェックは実際の登録状態に合わせる（切り替えに失敗したときも食い違わないように）
+                        let _ = autostart.set_checked(launcher.is_enabled().unwrap_or(false));
                     }
                     "quit" => app.exit(0),
                     _ => {}
