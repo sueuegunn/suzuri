@@ -42,23 +42,43 @@ pub fn before_show(app: &AppHandle) {
     let _ = app;
 }
 
-/// フォーカスを呼び出し元に戻す。
+/// フォーカスを呼び出し元に戻し、戻せたかを返す。呼び出し元のウィンドウが閉じられていたら何もしない。
 /// Windows は前面のプロセスしか前面を譲れないので、オーバーレイがまだ前面にあるうちに呼ぶ
-pub fn return_focus(app: &AppHandle, to: Caller) {
+pub fn return_focus(app: &AppHandle, to: Caller) -> bool {
     #[cfg(windows)]
     {
-        use windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{IsWindow, IsWindowVisible, SetForegroundWindow};
         let _ = app;
-        // SAFETY: 失われたウィンドウを渡しても失敗が返るだけ
-        unsafe { SetForegroundWindow(to.0 as _) };
+        let hwnd = to.0 as _;
+        // SAFETY: どの関数も、無効なウィンドウを渡すと失敗（0）を返すだけ
+        unsafe { IsWindow(hwnd) != 0 && IsWindowVisible(hwnd) != 0 && SetForegroundWindow(hwnd) != 0 }
     }
     #[cfg(target_os = "macos")]
     {
         let _ = to;
-        let _ = app.hide();
+        app.hide().is_ok()
     }
     #[cfg(not(any(windows, target_os = "macos")))]
-    let _ = (app, to);
+    {
+        let _ = (app, to);
+        false
+    }
+}
+
+/// 呼び出し元がいま前面にあるか。貼り付けのキーを送る直前に確かめ、別のウィンドウに送らないようにする。
+/// macOS は前面のアプリを確かめる手段を持たないので、常に true
+pub fn is_foreground(caller: Caller) -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        // SAFETY: 引数のない読み取りだけの API
+        unsafe { GetForegroundWindow() as isize == caller.0 }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = caller;
+        true
+    }
 }
 
 /// 貼り付けのキー（Windows は Ctrl+V、macOS は Cmd+V）を送る。

@@ -82,14 +82,21 @@ pub fn commit(
     paste: bool,
 ) -> Result<(), String> {
     let written = app.clipboard().write_text(text).map_err(|e| e.to_string());
-    let caller = state.caller.lock().unwrap().take().filter(|_| paste && written.is_ok());
-    if let Some(caller) = caller {
-        platform::return_focus(&app, caller);
-    }
+    // 呼び出し元のウィンドウが閉じられていたら、貼り付けはせずクリップボードに入れるだけにする
+    let caller = state
+        .caller
+        .lock()
+        .unwrap()
+        .take()
+        .filter(|&c| paste && written.is_ok() && platform::return_focus(&app, c));
     overlay::hide(&app);
-    if caller.is_some() {
-        thread::spawn(|| {
+    if let Some(caller) = caller {
+        thread::spawn(move || {
             thread::sleep(PASTE_DELAY);
+            // 待っている間に前面が別のウィンドウに変わっていたら送らない
+            if !platform::is_foreground(caller) {
+                return;
+            }
             if let Err(e) = platform::send_paste() {
                 eprintln!("貼り付けのキーを送れません: {e}");
             }
