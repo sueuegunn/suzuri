@@ -216,39 +216,22 @@ body {
   text-align: right;
 }
 
-/* 上の余白の中央に常に出す、動かすための掴みどころ。灰色のカプセルに「=」の2本線を入れる */
+/* 上の余白の中央に常に出す、動かすための掴みどころ。線を入れると引き下ろせるように見えるので、カプセルだけにする */
 .grabber {
   position: absolute;
   z-index: 3;
-  top: 12px;
+  top: 13px;
   left: 50%;
-  width: 48px;
-  height: 16px;
-  margin-left: -24px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.07);
+  width: 56px;
+  height: 14px;
+  margin-left: -28px;
+  border-radius: 7px;
+  background: var(--divider);
   cursor: move;
 }
 
-.grabber::after {
-  content: "";
-  position: absolute;
-  top: 5px;
-  left: 16px;
-  width: 16px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--muted);
-  box-shadow: 0 4px 0 var(--muted);
-}
-
 .grabber:hover {
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.grabber:hover::after {
-  background: var(--fg);
-  box-shadow: 0 4px 0 var(--fg);
+  background: var(--muted);
 }
 
 /* 大きさを変える掴みどころ。外の余白（8px）と縁のぼかしの内側 10px にまたがる */
