@@ -1,4 +1,7 @@
-# スズリ (Suzuri)
+<p align="center">
+  <img src="src-tauri/icons/icon.png" width="200">
+</p>
+<h1 align="center">スズリ (Suzuri)</h1>
 
 日本語の文を一文まるごとローマ字で打ち、マウスで文節と候補を直して、クリップボードに入れる（または元の入力欄に貼り付ける）デスクトップツールです。
 
