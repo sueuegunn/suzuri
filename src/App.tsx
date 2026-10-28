@@ -31,12 +31,12 @@ const CANDIDATE_LIST_SIZE = 9;
 type Mode = "copy" | "paste";
 const MODE_KEY = "suzuri.mode";
 
-/** 前回使ったモード。読めなければクリップボードだけのモード */
+/** 前回使ったモード。初めて起動したときや読めないときは貼り付けのモード */
 function loadMode(): Mode {
   try {
-    return localStorage.getItem(MODE_KEY) === "paste" ? "paste" : "copy";
+    return localStorage.getItem(MODE_KEY) === "copy" ? "copy" : "paste";
   } catch {
-    return "copy";
+    return "paste";
   }
 }
 
@@ -341,9 +341,9 @@ export default function App() {
           h.toggleMode();
           break;
         case " ":
-          // 打つそばから変換しているので、Space は打ちかけのローマ字を確定させるだけ。
-          // Shift+Space は半角スペースを入れる（全角はホイールで選ぶ）
-          h.typeLetter(e.shiftKey ? " " : "");
+          // 打つそばから変換していて Space で変換することはないので、Space は半角スペースを入れる。
+          // 全角はホイールで選ぶ
+          h.typeLetter(" ");
           break;
         case "Backspace":
           h.backspace();
