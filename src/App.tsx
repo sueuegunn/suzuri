@@ -394,20 +394,16 @@ export default function App() {
       e.preventDefault();
     };
     // 枠外をクリックしたら閉じる。内容は「前回」として残る。
-    // 動かしている間・大きさを変えている間は OS の処理に入って画面からフォーカスが外れるが、閉じない
+    // ウィンドウを動かしている間・大きさを変えている間も OS の処理に入って画面からフォーカスが外れるが、
+    // そのときはウィンドウ自体は前面のままなので閉じない。縁の数 px は OS が直接大きさ変更を始めるため、
+    // 画面側では操作が始まったことを知れない。OS にウィンドウが前面かを問い合わせて見分ける
     const onBlur = () => {
-      if (!windowDragging) handlers.current.cancel();
-    };
-    // OS の処理が終わるとフォーカスが戻る
-    const onFocus = () => {
-      windowDragging = false;
-    };
-    // macOS はウィンドウを動かしてもフォーカスが外れず、戻る合図もないので、ボタンを離して動かしたら終わりとみなす。
-    // 始めた直後は OS の処理に入る前なので見ない
-    const onPointerMove = (e: PointerEvent) => {
-      if (windowDragging && e.buttons === 0 && performance.now() - windowDragStartedAt > DRAG_SETTLE_MS) {
-        windowDragging = false;
-      }
+      getCurrentWindow()
+        .isFocused()
+        .then((focused) => {
+          if (!focused) handlers.current.cancel();
+        })
+        .catch(() => handlers.current.cancel());
     };
     const noMenu = (e: MouseEvent) => e.preventDefault();
     // ホイールは候補の切り替えに使い、スクロールは Ctrl+ホイールかスクロールバーで行う。
@@ -425,16 +421,12 @@ export default function App() {
     panel.addEventListener("wheel", noWheelScroll, { passive: false });
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("contextmenu", noMenu);
     return () => {
       unlisten.then((f) => f());
       panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("contextmenu", noMenu);
     };
   }, []);
@@ -593,21 +585,6 @@ function EnterIcon() {
 }
 
 /** 下段の文節の下に出す候補一覧。下に入りきらなければ上に出す */
-/** ウィンドウを動かしている・大きさを変えている最中か。その間はフォーカスが外れても閉じない */
-let windowDragging = false;
-let windowDragStartedAt = 0;
-/** 動かし始めてから OS の処理に入るまでの猶予 */
-const DRAG_SETTLE_MS = 300;
-
-function dragWindow(start: () => Promise<void>): Promise<void> {
-  windowDragging = true;
-  windowDragStartedAt = performance.now();
-  return start().catch((e) => {
-    windowDragging = false;
-    throw e;
-  });
-}
-
 /**
  * 上の掴みどころ・余白・下の案内の欄を左ボタンで押さえたら、ウィンドウを動かす。
  * 文字の上はピンや文節の操作に使うので動かさない。動かした位置は隠すときに Rust 側で覚える
@@ -617,7 +594,9 @@ function startMove(e: React.PointerEvent<HTMLElement>) {
   const target = e.target as HTMLElement;
   if (target !== e.currentTarget && !target.closest(".footer")) return;
   e.preventDefault();
-  dragWindow(() => getCurrentWindow().startDragging()).catch(() => {});
+  getCurrentWindow()
+    .startDragging()
+    .catch(() => {});
 }
 
 /** 掴みどころを2回押したとみなす間隔 */
@@ -689,7 +668,7 @@ function startResize(e: React.PointerEvent<HTMLElement>, dir: ResizeDirection) {
   el.addEventListener("pointermove", onMove);
   el.addEventListener("pointerup", onUp);
   el.addEventListener("pointercancel", onUp);
-  dragWindow(() => win.startResizeDragging(dir)).catch(async () => {
+  win.startResizeDragging(dir).catch(async () => {
     // OS に任せるときは掴まない（Windows の大きさ変更の処理とぶつからないように）
     try {
       el.setPointerCapture(pointerId);
