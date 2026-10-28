@@ -21,6 +21,8 @@ export const engine = {
   commit: (text: string, segments: Committed[], paste: boolean) =>
     invoke<void>("commit", { text, segments, paste }),
   cancel: () => invoke<void>("cancel"),
+  /** オーバーレイを今いるモニターの中央に戻す */
+  center: () => invoke<void>("center_overlay"),
 };
 
 export const settings = {

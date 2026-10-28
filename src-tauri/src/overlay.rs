@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutEvent, ShortcutState};
 
-use crate::settings::WindowGeometry;
+use crate::settings::{WindowPosition, WindowSize};
 use crate::{AppState, platform};
 
 const LABEL: &str = "overlay";
@@ -79,11 +79,14 @@ pub fn hide(app: &AppHandle) {
 /// マウスカーソルがあるモニターの中央に置く
 fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
     let state = app.state::<AppState>();
-    let saved = state.settings.get().window;
-    let size = saved.map_or(DEFAULT_SIZE, |g| LogicalSize::new(g.width, g.height));
+    let saved = state.settings.get();
+    let size = saved
+        .window_size
+        .map_or(DEFAULT_SIZE, |s| LogicalSize::new(s.width, s.height));
     let _ = window.set_size(size);
     let position = saved
-        .map(|g| PhysicalPosition::new(g.x, g.y))
+        .window_position
+        .map(|p| PhysicalPosition::new(p.x, p.y))
         .filter(|p| on_screen(app, *p))
         .or_else(|| centered_on_cursor_monitor(app, window, size));
     if let Some(position) = position {
@@ -118,8 +121,7 @@ fn centered_on_cursor_monitor(
     ))
 }
 
-/// 表示中に手で動かされていたら、その位置と大きさを覚える。
-/// 確定の処理を待たせないよう、保存は別スレッドで行う
+/// 表示中に手で動かされていたら、その位置と大きさを覚える
 fn remember_geometry(app: &AppHandle, window: &tauri::WebviewWindow) {
     let Some(placed) = app.state::<AppState>().placement.lock().unwrap().take() else {
         return;
@@ -136,15 +138,51 @@ fn remember_geometry(app: &AppHandle, window: &tauri::WebviewWindow) {
     if !moved && !resized {
         return;
     }
-    let geometry = WindowGeometry {
+    let position = WindowPosition {
         x: position.x,
         y: position.y,
+    };
+    let size = WindowSize {
         width: size.width.round(),
         height: size.height.round(),
     };
+    save_in_background(app, move |f| {
+        if moved {
+            f.window_position = Some(position);
+        }
+        if resized {
+            f.window_size = Some(size);
+        }
+    });
+}
+
+/// 大きさはそのままで、今いるモニターの中央に動かし、覚えた位置を忘れる
+pub fn center(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    let state = app.state::<AppState>();
+    let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
+        return;
+    };
+    let size = size.to_logical::<f64>(scale);
+    // ダブルクリックしたマウスはオーバーレイの上にあるので、オーバーレイがいるモニターの中央になる
+    let Some(position) = centered_on_cursor_monitor(app, &window, size) else {
+        return;
+    };
+    let _ = window.set_position(position);
+    // 隠すときに「手で動かした」と判断しないよう、置いた位置を更新しておく
+    if let Some(placed) = state.placement.lock().unwrap().as_mut() {
+        placed.position = position;
+    }
+    save_in_background(app, |f| f.window_position = None);
+}
+
+/// 確定や表示の処理を待たせないよう、設定の保存は別スレッドで行う
+fn save_in_background(app: &AppHandle, change: impl FnOnce(&mut crate::settings::SettingsFile) + Send + 'static) {
     let app = app.clone();
     thread::spawn(move || {
-        if let Err(e) = app.state::<AppState>().settings.update(|f| f.window = Some(geometry)) {
+        if let Err(e) = app.state::<AppState>().settings.update(change) {
             eprintln!("{e}");
         }
     });

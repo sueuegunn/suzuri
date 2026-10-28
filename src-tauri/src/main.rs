@@ -173,6 +173,7 @@ fn main() {
             commands::get_appearance,
             commands::set_appearance,
             commands::reset_window_geometry,
+            commands::center_overlay,
         ])
         .run(tauri::generate_context!())
         .expect("スズリを起動できません");

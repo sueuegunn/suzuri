@@ -488,7 +488,11 @@ export default function App() {
     <div className="frame">
       <ResizeHandles />
       {/* 上の縁の掴みどころより手前に出すため、パネルの外に置く */}
-      <div className="grabber" title="ドラッグで移動" onPointerDown={startMove} />
+      <div
+        className="grabber"
+        title="ドラッグで移動、ダブルクリックで画面の中央へ"
+        onPointerDown={onGrabberDown}
+      />
       <div className="panel" ref={panelRef} onPointerDown={startMove}>
         <div className="area reading-area" ref={bodyRef}>
           <div className="reading">
@@ -614,6 +618,27 @@ function startMove(e: React.PointerEvent<HTMLElement>) {
   if (target !== e.currentTarget && !target.closest(".footer")) return;
   e.preventDefault();
   dragWindow(() => getCurrentWindow().startDragging()).catch(() => {});
+}
+
+/** 掴みどころを2回押したとみなす間隔 */
+const DOUBLE_CLICK_MS = 400;
+let lastGrabberDown = 0;
+
+/**
+ * 掴みどころを押したら動かし、続けてもう一度押したら画面の中央に戻す。
+ * 1回目で OS の移動の処理に入るため、ダブルクリックのイベントは届かない。押した間隔で見分ける
+ */
+function onGrabberDown(e: React.PointerEvent<HTMLElement>) {
+  if (e.button !== 0) return;
+  const now = performance.now();
+  if (now - lastGrabberDown < DOUBLE_CLICK_MS) {
+    lastGrabberDown = 0;
+    e.preventDefault();
+    engine.center();
+    return;
+  }
+  lastGrabberDown = now;
+  startMove(e);
 }
 
 type ResizeDirection = Parameters<ReturnType<typeof getCurrentWindow>["startResizeDragging"]>[0];

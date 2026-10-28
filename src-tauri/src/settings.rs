@@ -55,12 +55,16 @@ impl Appearance {
     }
 }
 
-/// 手で動かしたオーバーレイの位置と大きさ。
-/// 位置はモニターをまたいだ座標なので物理ピクセル、大きさは拡大率の違うモニターでも同じ見た目になるよう論理ピクセルで持つ
+/// 手で動かしたオーバーレイの位置。モニターをまたいだ座標なので物理ピクセルで持つ
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct WindowGeometry {
+pub struct WindowPosition {
     pub x: i32,
     pub y: i32,
+}
+
+/// 手で変えたオーバーレイの大きさ。拡大率の違うモニターでも同じ見た目になるよう論理ピクセルで持つ
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WindowSize {
     pub width: f64,
     pub height: f64,
 }
@@ -72,8 +76,10 @@ pub struct SettingsFile {
     pub shortcuts: Bindings,
     pub letter_case: LetterCase,
     pub appearance: Appearance,
-    /// 手で動かしていなければ None。そのときは既定の大きさで、マウスのあるモニターの中央に出す
-    pub window: Option<WindowGeometry>,
+    /// 手で動かしていなければ None。そのときはマウスのあるモニターの中央に出す
+    pub window_position: Option<WindowPosition>,
+    /// 手で大きさを変えていなければ None。そのときは既定の大きさで出す
+    pub window_size: Option<WindowSize>,
 }
 
 pub struct Settings {
