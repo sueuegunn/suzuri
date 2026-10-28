@@ -90,7 +90,10 @@ body {
 
 .seg {
   border-radius: 4px;
-  text-decoration: underline 2px var(--seg-line);
+  /* 古い WebKit（macOS）は短縮形に太さを書くと全体を無視するので、個別に書く */
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--seg-line);
   text-underline-offset: 6px;
   text-decoration-skip-ink: none;
 }

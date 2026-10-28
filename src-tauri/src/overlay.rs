@@ -15,6 +15,9 @@ const LABEL: &str = "overlay";
 /// 手で大きさを変えていないときの大きさ（論理ピクセル）。
 /// 見えるパネルは 900×560 で、まわりに大きさを変える掴みどころ用の透明な余白が 8px ずつある
 const DEFAULT_SIZE: LogicalSize<f64> = LogicalSize::new(916.0, 576.0);
+/// 置いた位置と隠すときの位置がこれだけずれていなければ、動かしていないとみなす。
+/// macOS は論理ピクセルで置くため、拡大率が 2 のモニターでは物理ピクセルで 1 ずれて読めることがある
+const MOVE_TOLERANCE: i32 = 2;
 /// 覚えた位置に出すとき、ウィンドウの左上からこれだけ内側がどこかのモニターに入っていることを求める。
 /// モニターを外したあとに、画面の外へ出てしまわないようにする
 const VISIBLE_MARGIN: i32 = 80;
@@ -126,7 +129,8 @@ fn remember_geometry(app: &AppHandle, window: &tauri::WebviewWindow) {
         return;
     };
     let size = size.to_logical::<f64>(scale);
-    let moved = position != placed.position;
+    let moved = (position.x - placed.position.x).abs() > MOVE_TOLERANCE
+        || (position.y - placed.position.y).abs() > MOVE_TOLERANCE;
     // 論理ピクセルに直すときの丸めの差は、動かしたとみなさない
     let resized = (size.width - placed.size.width).abs() > 1.0 || (size.height - placed.size.height).abs() > 1.0;
     if !moved && !resized {

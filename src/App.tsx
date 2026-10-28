@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { applyAppearance, engine, settings, type Appearance, type LetterCase } from "./engine";
 import { feed, flush } from "./romaji";
 import {
@@ -401,6 +402,13 @@ export default function App() {
     const onFocus = () => {
       windowDragging = false;
     };
+    // macOS はウィンドウを動かしてもフォーカスが外れず、戻る合図もないので、ボタンを離して動かしたら終わりとみなす。
+    // 始めた直後は OS の処理に入る前なので見ない
+    const onPointerMove = (e: PointerEvent) => {
+      if (windowDragging && e.buttons === 0 && performance.now() - windowDragStartedAt > DRAG_SETTLE_MS) {
+        windowDragging = false;
+      }
+    };
     const noMenu = (e: MouseEvent) => e.preventDefault();
     // ホイールは候補の切り替えに使い、スクロールは Ctrl+ホイールかスクロールバーで行う。
     // React の onWheel は passive で止められないため、ここで止める。Ctrl+ホイールの拡大縮小も止まる
@@ -418,6 +426,7 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
+    window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("contextmenu", noMenu);
     return () => {
       unlisten.then((f) => f());
@@ -425,6 +434,7 @@ export default function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("contextmenu", noMenu);
     };
   }, []);
@@ -581,11 +591,16 @@ function EnterIcon() {
 /** 下段の文節の下に出す候補一覧。下に入りきらなければ上に出す */
 /** ウィンドウを動かしている・大きさを変えている最中か。その間はフォーカスが外れても閉じない */
 let windowDragging = false;
+let windowDragStartedAt = 0;
+/** 動かし始めてから OS の処理に入るまでの猶予 */
+const DRAG_SETTLE_MS = 300;
 
-function dragWindow(start: () => Promise<void>) {
+function dragWindow(start: () => Promise<void>): Promise<void> {
   windowDragging = true;
-  start().catch(() => {
+  windowDragStartedAt = performance.now();
+  return start().catch((e) => {
     windowDragging = false;
+    throw e;
   });
 }
 
@@ -598,10 +613,73 @@ function startMove(e: React.PointerEvent<HTMLElement>) {
   const target = e.target as HTMLElement;
   if (target !== e.currentTarget && !target.closest(".footer")) return;
   e.preventDefault();
-  dragWindow(() => getCurrentWindow().startDragging());
+  dragWindow(() => getCurrentWindow().startDragging()).catch(() => {});
 }
 
 type ResizeDirection = Parameters<ReturnType<typeof getCurrentWindow>["startResizeDragging"]>[0];
+
+/** 小さくできる限り。tauri.conf.json の minWidth・minHeight と合わせる */
+const MIN_WIDTH = 496;
+const MIN_HEIGHT = 316;
+
+/**
+ * 縁を押さえて大きさを変える。まず OS に任せ、できない OS（macOS）ではポインターの動きから自分で変える
+ */
+function startResize(e: React.PointerEvent<HTMLElement>, dir: ResizeDirection) {
+  const el = e.currentTarget;
+  const pointerId = e.pointerId;
+  const win = getCurrentWindow();
+  const origin = { x: e.screenX, y: e.screenY };
+  let pointer = origin;
+  let start: { x: number; y: number; width: number; height: number } | null = null;
+  let frame = 0;
+  const apply = () => {
+    frame = 0;
+    if (!start) return;
+    const dx = pointer.x - origin.x;
+    const dy = pointer.y - origin.y;
+    let { x, y, width, height } = start;
+    if (dir.includes("East")) width = Math.max(MIN_WIDTH, start.width + dx);
+    if (dir.includes("West")) {
+      width = Math.max(MIN_WIDTH, start.width - dx);
+      x = start.x + start.width - width;
+    }
+    if (dir.includes("South")) height = Math.max(MIN_HEIGHT, start.height + dy);
+    if (dir.includes("North")) {
+      height = Math.max(MIN_HEIGHT, start.height - dy);
+      y = start.y + start.height - height;
+    }
+    win.setSize(new LogicalSize(width, height));
+    if (x !== start.x || y !== start.y) win.setPosition(new LogicalPosition(x, y));
+  };
+  const onMove = (ev: PointerEvent) => {
+    pointer = { x: ev.screenX, y: ev.screenY };
+    if (start && !frame) frame = requestAnimationFrame(apply);
+  };
+  const onUp = () => {
+    el.removeEventListener("pointermove", onMove);
+    el.removeEventListener("pointerup", onUp);
+    el.removeEventListener("pointercancel", onUp);
+  };
+  el.addEventListener("pointermove", onMove);
+  el.addEventListener("pointerup", onUp);
+  el.addEventListener("pointercancel", onUp);
+  dragWindow(() => win.startResizeDragging(dir)).catch(async () => {
+    // OS に任せるときは掴まない（Windows の大きさ変更の処理とぶつからないように）
+    try {
+      el.setPointerCapture(pointerId);
+    } catch {
+      // もうボタンを離していたら何もしない
+      onUp();
+      return;
+    }
+    const [position, size, scale] = await Promise.all([win.outerPosition(), win.outerSize(), win.scaleFactor()]);
+    const p = position.toLogical(scale);
+    const s = size.toLogical(scale);
+    start = { x: p.x, y: p.y, width: s.width, height: s.height };
+    apply();
+  });
+}
 
 const RESIZE_EDGES: { dir: ResizeDirection; className: string }[] = [
   { dir: "North", className: "n" },
@@ -629,7 +707,7 @@ function ResizeHandles() {
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
-            dragWindow(() => getCurrentWindow().startResizeDragging(dir));
+            startResize(e, dir);
           }}
         />
       ))}

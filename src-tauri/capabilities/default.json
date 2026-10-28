@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "オーバーレイと設定のウィンドウに許可する操作",
   "windows": ["overlay", "settings"],
-  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-start-resize-dragging"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-start-resize-dragging", "core:window:allow-set-size", "core:window:allow-set-position"]
 }
