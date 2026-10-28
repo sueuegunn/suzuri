@@ -1,0 +1,72 @@
+# v から始まるタグを push すると、Windows と macOS の配布用ファイルを作り、下書きのリリースに置く。
+# 公開は GitHub の画面で下書きを確かめてから手で行う。
+# 使う Action はコミットのハッシュで固定する（タグを書き換えられても中身が変わらないように）。
+name: リリース
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+            rust-targets: ""
+          # Apple シリコンと Intel の両方で動く1つのアプリにする
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - run: npm ci
+
+      # Mozc の辞書を取得してバイナリ辞書を作る。取得元のコミットとハッシュ値は suzuri-dictgen で固定している
+      - run: cargo run -p suzuri-dictgen --release
+
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Suzuri ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+          releaseBody: |
+            ## インストール
+
+            **Windows**: `Suzuri_*_x64-setup.exe` を開いてインストールしてください。
+            署名がないため「Windows によって PC が保護されました」と出ます。「詳細情報」→「実行」で進めます。
+
+            **macOS**: `Suzuri_*_universal.dmg` を開き、Suzuri を「アプリケーション」に入れてください。
+            署名と公証がないため、初回は「壊れている」「開けません」と出ます。ターミナルで次を実行してから開いてください。
+
+            ```sh
+            xattr -cr /Applications/Suzuri.app
+            ```
+
+            貼り付けモードを使うには、システム設定の「プライバシーとセキュリティ」→「アクセシビリティ」で Suzuri を許可してください。
+
+            ## 使い方
+
+            `Alt+J`（macOS は `Option+J`）で呼び出し、ローマ字で一文を打って Enter で確定します。詳しくは [README](https://github.com/sueuegunn/suzuri#readme) を見てください。
