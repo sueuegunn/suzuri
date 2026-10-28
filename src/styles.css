@@ -208,6 +208,33 @@ body {
   text-align: right;
 }
 
+/* 上の余白の中央に出す、動かすための掴みどころ。見えない余白だけだと、どこを掴めばよいかわからない */
+.grabber {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  width: 120px;
+  height: 26px;
+  margin-left: -60px;
+  cursor: move;
+}
+
+.grabber::after {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 40px;
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--divider);
+}
+
+.grabber:hover::after {
+  background: var(--muted);
+}
+
 /* 大きさを変える掴みどころ。縁のぼかし（12px）の上に置く */
 .resize {
   position: absolute;

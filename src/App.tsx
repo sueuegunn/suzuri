@@ -392,8 +392,15 @@ export default function App() {
       }
       e.preventDefault();
     };
-    // 枠外をクリックしたら閉じる。内容は「前回」として残る
-    const onBlur = () => handlers.current.cancel();
+    // 枠外をクリックしたら閉じる。内容は「前回」として残る。
+    // 動かしている間・大きさを変えている間は OS の処理に入って画面からフォーカスが外れるが、閉じない
+    const onBlur = () => {
+      if (!windowDragging) handlers.current.cancel();
+    };
+    // OS の処理が終わるとフォーカスが戻る
+    const onFocus = () => {
+      windowDragging = false;
+    };
     const noMenu = (e: MouseEvent) => e.preventDefault();
     // ホイールは候補の切り替えに使い、スクロールは Ctrl+ホイールかスクロールバーで行う。
     // React の onWheel は passive で止められないため、ここで止める。Ctrl+ホイールの拡大縮小も止まる
@@ -410,12 +417,14 @@ export default function App() {
     panel.addEventListener("wheel", noWheelScroll, { passive: false });
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
     window.addEventListener("contextmenu", noMenu);
     return () => {
       unlisten.then((f) => f());
       panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
       window.removeEventListener("contextmenu", noMenu);
     };
   }, []);
@@ -468,6 +477,7 @@ export default function App() {
   return (
     <div className="panel" ref={panelRef} onPointerDown={startMove}>
       <ResizeHandles />
+      <div className="grabber" title="ドラッグで移動" />
       <div className="area reading-area" ref={bodyRef}>
         <div className="reading">
           {segments
@@ -566,16 +576,26 @@ function EnterIcon() {
 }
 
 /** 下段の文節の下に出す候補一覧。下に入りきらなければ上に出す */
+/** ウィンドウを動かしている・大きさを変えている最中か。その間はフォーカスが外れても閉じない */
+let windowDragging = false;
+
+function dragWindow(start: () => Promise<void>) {
+  windowDragging = true;
+  start().catch(() => {
+    windowDragging = false;
+  });
+}
+
 /**
- * 余白か下の案内の欄を左ボタンで押さえたら、ウィンドウを動かす。
+ * 上の掴みどころ・余白・下の案内の欄を左ボタンで押さえたら、ウィンドウを動かす。
  * 文字の上はピンや文節の操作に使うので動かさない。動かした位置は隠すときに Rust 側で覚える
  */
 function startMove(e: React.PointerEvent<HTMLElement>) {
   if (e.button !== 0) return;
   const target = e.target as HTMLElement;
-  if (target !== e.currentTarget && !target.closest(".footer")) return;
+  if (target !== e.currentTarget && !target.closest(".footer, .grabber")) return;
   e.preventDefault();
-  getCurrentWindow().startDragging();
+  dragWindow(() => getCurrentWindow().startDragging());
 }
 
 type ResizeDirection = Parameters<ReturnType<typeof getCurrentWindow>["startResizeDragging"]>[0];
@@ -603,7 +623,7 @@ function ResizeHandles() {
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
-            getCurrentWindow().startResizeDragging(dir);
+            dragWindow(() => getCurrentWindow().startResizeDragging(dir));
           }}
         />
       ))}
