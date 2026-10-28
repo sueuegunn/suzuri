@@ -445,8 +445,9 @@ export default function App() {
     </>
   );
 
-  /** 上段と下段で同じ文節を同じように強調する */
-  const segClass = (i: number) => "seg" + (listFor === i ? " active" : hover === i ? " hover" : "");
+  /** 上段と下段で同じ文節を同じように強調する。下線の色は文節ごとに交互にし、上下の対応を見せる */
+  const segClass = (i: number) =>
+    "seg" + (i % 2 ? " odd" : "") + (listFor === i ? " active" : hover === i ? " hover" : "");
 
   /** 上段・下段の文節に共通のマウス操作 */
   const segHandlers = (i: number) => ({
