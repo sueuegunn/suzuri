@@ -99,12 +99,16 @@ body {
   mask-composite: intersect;
 }
 
-/* 上段（読み）と下段（変換結果）は同じ高さで分け、それぞれではみ出したらスクロールする */
+/* 上段（読み）と下段（変換結果）は同じ高さで分け、それぞれではみ出したら縦にスクロールする。
+   文字は折り返すので横にはスクロールさせない。行末のピンやカーソルが少しはみ出しても横のスクロールバーを出さない */
 .area {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  /* 空白のない長い英字の並びも、行の幅で折り返す */
+  overflow-wrap: anywhere;
 }
 
 .result-area {
