@@ -77,9 +77,11 @@ impl Appearance {
     }
 }
 
-/// 手で動かしたオーバーレイの位置。モニターをまたいだ座標なので物理ピクセルで持つ
-#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// 手で動かしたオーバーレイの位置。モニターごとに、そのモニターの左上からの物理ピクセルで持つ
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct WindowPosition {
+    /// どのモニターか。名前と配置と解像度から作る（`overlay::monitor_key`）
+    pub monitor: String,
     pub x: i32,
     pub y: i32,
 }
@@ -99,10 +101,33 @@ pub struct SettingsFile {
     pub letter_case: LetterCase,
     pub appearance: Appearance,
     pub theme: Theme,
-    /// 手で動かしていなければ None。そのときはマウスのあるモニターの中央に出す
-    pub window_position: Option<WindowPosition>,
+    /// 手で動かした位置をモニターごとに持つ。マウスのあるモニターの分がなければ、そのモニターの中央に出す。
+    /// 以前の、モニターを区別しない `windowPosition` は読まずに捨てる
+    pub window_positions: Vec<WindowPosition>,
     /// 手で大きさを変えていなければ None。そのときは既定の大きさで出す
     pub window_size: Option<WindowSize>,
+}
+
+impl SettingsFile {
+    /// モニター `monitor` で覚えた位置（モニターの左上から）
+    pub fn window_position(&self, monitor: &str) -> Option<(i32, i32)> {
+        self.window_positions
+            .iter()
+            .find(|p| p.monitor == monitor)
+            .map(|p| (p.x, p.y))
+    }
+
+    /// モニター `monitor` で覚えた位置を置き換える。None なら忘れる
+    pub fn set_window_position(&mut self, monitor: &str, position: Option<(i32, i32)>) {
+        self.window_positions.retain(|p| p.monitor != monitor);
+        if let Some((x, y)) = position {
+            self.window_positions.push(WindowPosition {
+                monitor: monitor.to_string(),
+                x,
+                y,
+            });
+        }
+    }
 }
 
 pub struct Settings {
@@ -164,6 +189,21 @@ mod tests {
         assert!(file.letter_case == LetterCase::Lower);
         assert!(file.shortcuts == Bindings::default());
         assert!(file.appearance == Appearance::default());
+    }
+
+    #[test]
+    fn remembers_window_position_per_monitor() {
+        // 以前の、モニターを区別しない位置は捨てる
+        let mut file: SettingsFile = serde_json::from_str(r#"{"windowPosition":{"x":10,"y":20}}"#).unwrap();
+        assert!(file.window_positions.is_empty());
+        file.set_window_position("left", Some((10, 20)));
+        file.set_window_position("right", Some((30, 40)));
+        file.set_window_position("left", Some((50, 60)));
+        assert_eq!(file.window_position("left"), Some((50, 60)));
+        assert_eq!(file.window_position("right"), Some((30, 40)));
+        file.set_window_position("right", None);
+        assert_eq!(file.window_position("right"), None);
+        assert_eq!(file.window_positions.len(), 1);
     }
 
     #[test]

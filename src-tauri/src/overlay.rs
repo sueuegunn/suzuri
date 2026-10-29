@@ -1,14 +1,14 @@
 //! オーバーレイの表示と非表示。
 //! ウィンドウは起動時に1つだけ作り、表示を切り替えて使い回す（毎回作ると WebView の起動待ちが出る）。
-//! 手で動かした位置と大きさは、隠すときに覚えて次から同じところに出す。
+//! 手で動かした位置と大きさは、隠すときに覚えて次から同じところに出す。位置はモニターごとに覚える。
 
 use std::thread;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutEvent, ShortcutState};
 
-use crate::settings::{WindowPosition, WindowSize};
+use crate::settings::WindowSize;
 use crate::{AppState, platform};
 
 const LABEL: &str = "overlay";
@@ -75,8 +75,8 @@ pub fn hide(app: &AppHandle) {
     }
 }
 
-/// 覚えた位置と大きさに置く。覚えていない、または覚えた位置がどのモニターにも入らないときは、
-/// マウスカーソルがあるモニターの中央に置く
+/// 覚えた大きさで、マウスカーソルがあるモニターに置く。そのモニターで位置を覚えていない、
+/// または覚えた位置がどのモニターにも入らないときは、そのモニターの中央に置く
 fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
     let state = app.state::<AppState>();
     let saved = state.settings.get();
@@ -84,15 +84,25 @@ fn place(app: &AppHandle, window: &tauri::WebviewWindow) {
         .window_size
         .map_or(DEFAULT_SIZE, |s| LogicalSize::new(s.width, s.height));
     let _ = window.set_size(size);
+    let Some(monitor) = cursor_monitor(app, window) else {
+        return;
+    };
+    let origin = monitor.position();
     let position = saved
-        .window_position
-        .map(|p| PhysicalPosition::new(p.x, p.y))
+        .window_position(&monitor_key(&monitor))
+        .map(|(x, y)| PhysicalPosition::new(origin.x + x, origin.y + y))
         .filter(|p| on_screen(app, *p))
-        .or_else(|| centered_on_cursor_monitor(app, window, size));
-    if let Some(position) = position {
-        let _ = window.set_position(position);
-        *state.placement.lock().unwrap() = Some(Placement { position, size });
-    }
+        .unwrap_or_else(|| centered_on(&monitor, size));
+    let _ = window.set_position(position);
+    *state.placement.lock().unwrap() = Some(Placement { position, size });
+}
+
+/// 位置を覚えるときにモニターを見分ける名前。同じ機種のモニターを並べても分かれるよう配置を、
+/// 解像度を変えたあとに覚えた位置で画面からはみ出さないよう解像度を含める
+fn monitor_key(monitor: &Monitor) -> String {
+    let (p, s) = (monitor.position(), monitor.size());
+    let name = monitor.name().map_or("", |n| n.as_str());
+    format!("{name} {},{} {}x{}", p.x, p.y, s.width, s.height)
 }
 
 fn on_screen(app: &AppHandle, p: PhysicalPosition<i32>) -> bool {
@@ -102,26 +112,25 @@ fn on_screen(app: &AppHandle, p: PhysicalPosition<i32>) -> bool {
         .is_some()
 }
 
-fn centered_on_cursor_monitor(
-    app: &AppHandle,
-    window: &tauri::WebviewWindow,
-    size: LogicalSize<f64>,
-) -> Option<PhysicalPosition<i32>> {
-    let monitor = app
-        .cursor_position()
+/// マウスカーソルがあるモニター。分からなければメインのモニター
+fn cursor_monitor(app: &AppHandle, window: &tauri::WebviewWindow) -> Option<Monitor> {
+    app.cursor_position()
         .ok()
         .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
-        .or_else(|| window.primary_monitor().ok().flatten())?;
+        .or_else(|| window.primary_monitor().ok().flatten())
+}
+
+fn centered_on(monitor: &Monitor, size: LogicalSize<f64>) -> PhysicalPosition<i32> {
     let size = size.to_physical::<i32>(monitor.scale_factor());
     let origin = monitor.position();
     let area = monitor.size();
-    Some(PhysicalPosition::new(
+    PhysicalPosition::new(
         origin.x + (area.width as i32 - size.width) / 2,
         origin.y + (area.height as i32 - size.height) / 2,
-    ))
+    )
 }
 
-/// 表示中に手で動かされていたら、その位置と大きさを覚える
+/// 表示中に手で動かされていたら、その位置と大きさを覚える。位置は、隠すときにウィンドウがいるモニターの分として覚える
 fn remember_geometry(app: &AppHandle, window: &tauri::WebviewWindow) {
     let Some(placed) = app.state::<AppState>().placement.lock().unwrap().take() else {
         return;
@@ -138,17 +147,18 @@ fn remember_geometry(app: &AppHandle, window: &tauri::WebviewWindow) {
     if !moved && !resized {
         return;
     }
-    let position = WindowPosition {
-        x: position.x,
-        y: position.y,
-    };
+    // 別のモニターへ動かしたなら、そのモニターの位置として覚える
+    let position = window.current_monitor().ok().flatten().map(|m| {
+        let origin = m.position();
+        (monitor_key(&m), (position.x - origin.x, position.y - origin.y))
+    });
     let size = WindowSize {
         width: size.width.round(),
         height: size.height.round(),
     };
     save_in_background(app, move |f| {
-        if moved {
-            f.window_position = Some(position);
+        if let (true, Some((monitor, offset))) = (moved, &position) {
+            f.set_window_position(monitor, Some(*offset));
         }
         if resized {
             f.window_size = Some(size);
@@ -156,7 +166,7 @@ fn remember_geometry(app: &AppHandle, window: &tauri::WebviewWindow) {
     });
 }
 
-/// 大きさはそのままで、今いるモニターの中央に動かし、覚えた位置を忘れる
+/// 大きさはそのままで、今いるモニターの中央に動かし、そのモニターで覚えた位置を忘れる
 pub fn center(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
@@ -167,15 +177,17 @@ pub fn center(app: &AppHandle) {
     };
     let size = size.to_logical::<f64>(scale);
     // ダブルクリックしたマウスはオーバーレイの上にあるので、オーバーレイがいるモニターの中央になる
-    let Some(position) = centered_on_cursor_monitor(app, &window, size) else {
+    let Some(monitor) = cursor_monitor(app, &window) else {
         return;
     };
+    let position = centered_on(&monitor, size);
     let _ = window.set_position(position);
     // 隠すときに「手で動かした」と判断しないよう、置いた位置を更新しておく
     if let Some(placed) = state.placement.lock().unwrap().as_mut() {
         placed.position = position;
     }
-    save_in_background(app, |f| f.window_position = None);
+    let key = monitor_key(&monitor);
+    save_in_background(app, move |f| f.set_window_position(&key, None));
 }
 
 /// 確定や表示の処理を待たせないよう、設定の保存は別スレッドで行う

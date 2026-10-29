@@ -183,7 +183,7 @@ pub fn set_appearance(app: AppHandle, state: State<'_, AppState>, appearance: Ap
 #[tauri::command]
 pub fn reset_window_geometry(state: State<'_, AppState>) -> Result<(), String> {
     state.settings.update(|f| {
-        f.window_position = None;
+        f.window_positions.clear();
         f.window_size = None;
     })
 }
