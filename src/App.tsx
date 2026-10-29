@@ -153,9 +153,19 @@ export default function App() {
     );
   };
 
+  /**
+   * 直前の打鍵で打ちかけのローマ字が確定したときの、打つ前の状態と打ったあとの状態。
+   * 次の Backspace でその打鍵だけを取り消し、前後の打鍵をつなげる（t k BS u → つ、n k BS a → な）
+   */
+  const retypeRef = useRef<{ before: Session; after: Session } | null>(null);
+
   const type = (ch: string) => {
     const s = sessionRef.current;
     const r = feed(s.pending, ch, Array.from(s.kana)[s.caret - 1]);
+    // 打った文字が打ちかけのローマ字として残っているときだけ。「ka」で「か」になったあとの BS は「か」を消す
+    const kana = splice(s.kana, s.caret, 0, r.kana);
+    const after = { ...s, kana, caret: s.caret + length(r.kana), pending: r.pending };
+    retypeRef.current = s.pending !== "" && r.pending !== "" ? { before: s, after } : null;
     if (r.kana === "") {
       update({ ...s, pending: r.pending });
       return;
@@ -188,6 +198,18 @@ export default function App() {
 
   const backspace = () => {
     const s = sessionRef.current;
+    const retype = retypeRef.current;
+    retypeRef.current = null;
+    // Shift+英字やカーソル移動を挟んだときは、かなや打ちかけが変わっているので取り消さない
+    const after = retype?.after;
+    if (retype && s.kana === after?.kana && s.caret === after.caret && s.pending === after.pending) {
+      const { before } = retype;
+      const removed = s.caret - before.caret;
+      const next = { ...s, kana: before.kana, caret: before.caret, pending: before.pending };
+      if (removed === 0) update(next);
+      else edit(s, next, before.caret, removed, 0);
+      return;
+    }
     if (s.pending !== "") {
       update({ ...s, pending: s.pending.slice(0, -1) });
       return;
