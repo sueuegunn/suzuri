@@ -53,6 +53,19 @@ function saveMode(mode: Mode) {
   }
 }
 
+/** 次の描画が終わるのを待つ。描画が止まっているときに待ち続けないよう、長くても 50ms で打ち切る */
+function afterPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 50);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        resolve();
+      }),
+    );
+  });
+}
+
 type Drag = { pin: number; target: number; x: number; y: number; height: number };
 
 /** 未確定のローマ字をカーソル位置に確定させる */
@@ -67,6 +80,8 @@ export default function App() {
   const sessionRef = useRef(session);
   const previousRef = useRef<Session>(emptySession);
   const requestRef = useRef(0);
+  /** 閉じてから次に呼び出されるまでの間か */
+  const closedRef = useRef(false);
   const [listFor, setListFor] = useState<number | null>(null);
   const wheel = useRef({ acc: 0, index: -1, at: 0 });
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -100,23 +115,34 @@ export default function App() {
     update({ ...cur, segments: carrySelections(previous, segments, shift) });
   };
 
+  /**
+   * 前回の内容を覚え、画面を空にする。返す Promise は空の画面を描き終えたら解決する。
+   * 隠したあとの WebView は描き直さないので、隠す前に空にしておかないと、次に出したときに
+   * 前の内容が一部残って見えることがある（macOS で起きた）
+   */
   const close = () => {
+    // 隠したときの blur でもう一度呼ばれるので、空にした画面で前回を上書きしない
+    if (closedRef.current) return Promise.resolve();
+    closedRef.current = true;
     previousRef.current = settle(sessionRef.current);
+    // 届く途中の変換結果を捨てる
+    requestRef.current++;
+    update(emptySession);
     setListFor(null);
     setDrag(null);
+    return afterPaint();
   };
 
   const cancel = () => {
-    close();
-    engine.cancel();
+    close().then(() => engine.cancel());
   };
 
   const commit = () => {
     const s = settle(sessionRef.current);
     const text = resultText(s);
-    close();
+    const closed = close();
     if (text === "") {
-      engine.cancel();
+      closed.then(() => engine.cancel());
       return;
     }
     const segments = (s.segments ?? []).map((seg) => ({
@@ -124,7 +150,8 @@ export default function App() {
       surface: seg.candidates[seg.selected],
       wasFirst: seg.selected === 0,
     }));
-    engine.commit(text, segments, modeRef.current === "paste");
+    const paste = modeRef.current === "paste";
+    closed.then(() => engine.commit(text, segments, paste));
   };
 
   /**
@@ -368,6 +395,7 @@ export default function App() {
 
   useEffect(() => {
     const unlisten = listen<"new" | "previous">("summon", (e) => {
+      closedRef.current = false;
       update(e.payload === "previous" ? previousRef.current : emptySession);
       setListFor(null);
       setDrag(null);
