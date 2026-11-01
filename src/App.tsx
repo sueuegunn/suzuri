@@ -959,9 +959,9 @@ export default function App() {
             ) : segments ? (
               <>
                 <MouseIcon part="wheel" /> 候補{SEP}
-                <MouseIcon part="left" drag /> 文節の区切りを移動{SEP}
-                <MouseIcon part="right" /> ピン追加・削除{SEP}
-                <MouseIcon part="right" drag /> 1文節にまとめる{SEP}
+                <MouseIcon part="left" drag /> 文節区切り移動{SEP}
+                <MouseIcon part="right" /> ピン追加削除{SEP}
+                <MouseIcon part="right" drag /> 文節まとめ{SEP}
                 Ctrl+
                 <MouseIcon part="wheel" /> スクロール
               </>
