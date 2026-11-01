@@ -430,12 +430,6 @@ export default function App() {
       window.focus();
     });
     const onKey = (e: KeyboardEvent) => {
-      // Shift だけを押して離したら英数・かなを切り替える。押している間にほかのキーを押したら切り替えない
-      if (e.key === "Shift") {
-        if (!e.repeat) shiftTap = !e.ctrlKey && !e.metaKey && !e.altKey;
-        return;
-      }
-      shiftTap = false;
       // OS の IME が動いているときの打鍵は扱わない
       if (e.isComposing || e.key === "Process" || e.ctrlKey || e.metaKey || e.altKey) return;
       const h = handlers.current;
@@ -488,25 +482,12 @@ export default function App() {
           if (e.key.length !== 1) return;
           // 英数モードは、打ったとおりの文字をそのまま入れる
           if (inputModeRef.current === "alnum") h.typeLetter(e.key);
-          // CapsLock の状態によらず、Shift を押しているかで英字かローマ字かを決める。
-          // ふつうの IME と同じく、Shift+英字のあとは英数モードにして続きを英字で打てるようにする
-          else if (e.shiftKey && /^[a-z]$/i.test(e.key)) {
+          // CapsLock の状態によらず、Shift を押しているかで英字かローマ字かを決める
+          else if (e.shiftKey && /^[a-z]$/i.test(e.key))
             h.typeLetter(letterCaseRef.current === "lower" ? e.key.toLowerCase() : e.key.toUpperCase());
-            h.setInputMode("alnum");
-          } else h.type(e.key);
+          else h.type(e.key);
       }
       e.preventDefault();
-    };
-    let shiftTap = false;
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== "Shift" || !shiftTap) return;
-      shiftTap = false;
-      const h = handlers.current;
-      h.setInputMode(inputModeRef.current === "kana" ? "alnum" : "kana");
-    };
-    // Shift を押しながらのクリックやホイールでは切り替えない
-    const cancelShiftTap = () => {
-      shiftTap = false;
     };
     // 枠外をクリックしたら閉じる。内容は「前回」として残る。
     // ウィンドウを動かしている間・大きさを変えている間も OS の処理に入って画面からフォーカスが外れるが、
@@ -535,20 +516,12 @@ export default function App() {
     const panel = panelRef.current!;
     panel.addEventListener("wheel", noWheelScroll, { passive: false });
     window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("pointerdown", cancelShiftTap, true);
-    window.addEventListener("wheel", cancelShiftTap, true);
-    window.addEventListener("blur", cancelShiftTap);
     window.addEventListener("blur", onBlur);
     window.addEventListener("contextmenu", noMenu);
     return () => {
       unlisten.then((f) => f());
       panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("pointerdown", cancelShiftTap, true);
-      window.removeEventListener("wheel", cancelShiftTap, true);
-      window.removeEventListener("blur", cancelShiftTap);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("contextmenu", noMenu);
     };
@@ -677,7 +650,7 @@ export default function App() {
             ) : topHover === "input" ? (
               <>
                 <MouseIcon part="left" /> 英数・かなの切り替え{SEP}
-                Shift だけを押す・{IS_MAC ? "英数キー・かなキー" : "半角/全角キー・無変換キー・変換キー"}でも切り替え
+                {IS_MAC ? "英数キー・かなキー" : "半角/全角キー・無変換キー・変換キー"}でも切り替え
               </>
             ) : segments ? (
               <>
