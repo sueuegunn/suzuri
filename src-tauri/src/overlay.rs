@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutEvent, ShortcutState};
 
-use crate::settings::WindowSize;
+use crate::settings::{StartInputMode, WindowSize};
 use crate::{AppState, platform};
 
 const LABEL: &str = "overlay";
@@ -58,13 +58,29 @@ pub fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     show(app, mode);
 }
 
+/// 打った文字をローマ字としてかなにするか、そのまま入れるか
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum InputMode {
+    Kana,
+    Alnum,
+}
+
+/// 呼び出したときの入力モード。IME に合わせるときは、英字入力と読めたときだけ英数にし、
+/// 分からなければ日本語を打つための道具なのでかなで始める
+fn input_mode(start: StartInputMode, ime_japanese: Option<bool>) -> InputMode {
+    match (start, ime_japanese) {
+        (StartInputMode::Alnum, _) | (StartInputMode::MatchIme, Some(false)) => InputMode::Alnum,
+        _ => InputMode::Kana,
+    }
+}
+
 /// 画面に送る "summon" イベントの中身
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Summon {
     mode: Mode,
-    /// 呼び出し元の IME が日本語入力だったか。分からなければ null
-    ime_japanese: Option<bool>,
+    input: InputMode,
 }
 
 pub fn show(app: &AppHandle, mode: Mode) {
@@ -74,8 +90,10 @@ pub fn show(app: &AppHandle, mode: Mode) {
     platform::before_show(app);
     place(app, &window);
     // 表示する前に状態を切り替えさせ、前の内容が一瞬見えないようにする
-    let ime_japanese = *app.state::<AppState>().ime_japanese.lock().unwrap();
-    let _ = window.emit("summon", Summon { mode, ime_japanese });
+    let state = app.state::<AppState>();
+    let ime_japanese = *state.ime_japanese.lock().unwrap();
+    let input = input_mode(state.settings.get().start_input_mode, ime_japanese);
+    let _ = window.emit("summon", Summon { mode, input });
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -210,4 +228,22 @@ fn save_in_background(app: &AppHandle, change: impl FnOnce(&mut crate::settings:
             eprintln!("{e}");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chooses_input_mode_on_summon() {
+        use StartInputMode as Start;
+        assert_eq!(input_mode(Start::MatchIme, Some(true)), InputMode::Kana);
+        assert_eq!(input_mode(Start::MatchIme, Some(false)), InputMode::Alnum);
+        // トレイから開いたときや IME を読めないときは、かなで始める
+        assert_eq!(input_mode(Start::MatchIme, None), InputMode::Kana);
+        // 固定にしたら IME によらない
+        assert_eq!(input_mode(Start::Kana, Some(false)), InputMode::Kana);
+        assert_eq!(input_mode(Start::Alnum, Some(true)), InputMode::Alnum);
+        assert_eq!(input_mode(Start::Alnum, None), InputMode::Alnum);
+    }
 }

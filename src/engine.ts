@@ -4,9 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type { EngineSegment } from "./session";
 import type { Bindings } from "./shortcut";
 
-/** Shift を押しながら打った英字を、大文字と小文字のどちらで入れるか */
-export type LetterCase = "upper" | "lower";
-
 /** 画面の配色。system は OS の設定に合わせる */
 export type Theme = "system" | "light" | "dark";
 
@@ -36,9 +33,6 @@ export const settings = {
   set: (bindings?: Bindings) => invoke<Bindings>("set_shortcuts", { bindings: bindings ?? null }),
   suspend: () => invoke<void>("suspend_shortcuts"),
   resume: () => invoke<void>("resume_shortcuts"),
-  getLetterCase: () => invoke<LetterCase>("get_letter_case"),
-  /** 変えるとオーバーレイに "letter-case" イベントで知らせる */
-  setLetterCase: (letterCase: LetterCase) => invoke<void>("set_letter_case", { letterCase }),
   getTheme: () => invoke<Theme>("get_theme"),
   getAppearance: () => invoke<Appearance>("get_appearance"),
   /** 範囲に収めた値を返す。変えるとオーバーレイに "appearance" イベントで知らせる */

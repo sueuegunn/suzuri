@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { settings, type Appearance, type LetterCase } from "./engine";
+import { settings, type Appearance } from "./engine";
 import { label, record, type Bindings } from "./shortcut";
 
 const MAC = /Mac/i.test(navigator.userAgent);
@@ -7,11 +7,6 @@ const MAC = /Mac/i.test(navigator.userAgent);
 const ROWS: { kind: keyof Bindings; title: string }[] = [
   { kind: "new", title: "新しく入力する" },
   { kind: "previous", title: "前回の状態を直す" },
-];
-
-const CASES: { value: LetterCase; title: string }[] = [
-  { value: "upper", title: "大文字" },
-  { value: "lower", title: "小文字" },
 ];
 
 /** 見た目の設定の項目。範囲は Rust 側の Appearance と合わせる */
@@ -28,7 +23,6 @@ export default function Settings() {
   const [bindings, setBindings] = useState<Bindings | null>(null);
   const [recording, setRecording] = useState<keyof Bindings | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [letterCase, setLetterCase] = useState<LetterCase | null>(null);
   const [appearance, setAppearance] = useState<Appearance | null>(null);
   const appearanceTimer = useRef<number | undefined>(undefined);
   const recordingRef = useRef(recording);
@@ -36,7 +30,6 @@ export default function Settings() {
 
   useEffect(() => {
     settings.get().then(setBindings);
-    settings.getLetterCase().then(setLetterCase);
     settings.getAppearance().then(setAppearance);
   }, []);
 
@@ -56,15 +49,6 @@ export default function Settings() {
     try {
       setBindings(await settings.set(next));
       setMessage({ text: done, error: false });
-    } catch (e) {
-      setMessage({ text: String(e), error: true });
-    }
-  };
-
-  const changeLetterCase = async (next: LetterCase) => {
-    try {
-      await settings.setLetterCase(next);
-      setLetterCase(next);
     } catch (e) {
       setMessage({ text: String(e), error: true });
     }
@@ -126,22 +110,6 @@ export default function Settings() {
         <button onClick={() => save(undefined, "既定に戻しました")} disabled={recording !== null}>
           既定に戻す
         </button>
-      </div>
-      <h1>入力</h1>
-      <div className="settings-row">
-        <span>Shift + 英字</span>
-        <div className="segmented">
-          {CASES.map(({ value, title }) => (
-            <button
-              key={value}
-              className={letterCase === value ? "selected" : ""}
-              onClick={() => changeLetterCase(value)}
-              disabled={recording !== null}
-            >
-              {title}
-            </button>
-          ))}
-        </div>
       </div>
       <h1>見た目</h1>
       {SLIDERS.map(({ key, title, min, max, step }) => (

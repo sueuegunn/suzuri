@@ -9,13 +9,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::shortcuts::Bindings;
 
-/// Shift を押しながら打った英字を、大文字と小文字のどちらで入れるか
-#[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// オーバーレイを呼び出したときの入力モード。トレイメニューの「起動時の入力モード」で選ぶ
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum LetterCase {
+pub enum StartInputMode {
+    /// 呼び出し元の OS の IME に合わせる
     #[default]
-    Upper,
-    Lower,
+    MatchIme,
+    Kana,
+    Alnum,
 }
 
 /// 画面の配色。トレイメニューの「外観」で選ぶ
@@ -98,7 +100,8 @@ pub struct WindowSize {
 #[serde(default, rename_all = "camelCase")]
 pub struct SettingsFile {
     pub shortcuts: Bindings,
-    pub letter_case: LetterCase,
+    /// 以前の `letterCase`（Shift+英字の大文字・小文字）は読まずに捨てる
+    pub start_input_mode: StartInputMode,
     pub appearance: Appearance,
     pub theme: Theme,
     /// 手で動かした位置をモニターごとに持つ。マウスのあるモニターの分がなければ、そのモニターの中央に出す。
@@ -180,13 +183,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_old_settings_without_letter_case() {
+    fn reads_old_settings() {
         let file: SettingsFile =
             serde_json::from_str(r#"{"shortcuts":{"new":"Ctrl+KeyK","previous":"Ctrl+Shift+KeyK"}}"#).unwrap();
         assert_eq!(file.shortcuts.new, "Ctrl+KeyK");
-        assert!(file.letter_case == LetterCase::Upper);
-        let file: SettingsFile = serde_json::from_str(r#"{"letterCase":"lower"}"#).unwrap();
-        assert!(file.letter_case == LetterCase::Lower);
+        assert_eq!(file.start_input_mode, StartInputMode::MatchIme);
+        // なくした設定の letterCase が残っていても読める
+        let file: SettingsFile = serde_json::from_str(r#"{"letterCase":"lower","startInputMode":"alnum"}"#).unwrap();
+        assert_eq!(file.start_input_mode, StartInputMode::Alnum);
         assert!(file.shortcuts == Bindings::default());
         assert!(file.appearance == Appearance::default());
     }

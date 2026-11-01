@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use suzuri_engine::Engine;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
-use settings::Theme;
+use settings::{StartInputMode, Theme};
 use tauri::{Emitter, Manager};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::path::BaseDirectory;
@@ -36,6 +36,16 @@ pub struct AppState {
 
 const SETTINGS_LABEL: &str = "settings";
 const THEME_MENU_PREFIX: &str = "theme_";
+const INPUT_MENU_PREFIX: &str = "input_";
+
+fn input_menu_id(mode: StartInputMode) -> String {
+    let name = match mode {
+        StartInputMode::MatchIme => "match_ime",
+        StartInputMode::Kana => "kana",
+        StartInputMode::Alnum => "alnum",
+    };
+    format!("{INPUT_MENU_PREFIX}{name}")
+}
 
 fn theme_menu_id(theme: Theme) -> String {
     let name = match theme {
@@ -140,12 +150,26 @@ fn main() {
             })
             .collect::<Result<Vec<_>, _>>()?;
             let appearance = Submenu::with_items(app, "外観", true, &[&themes[0].1, &themes[1].1, &themes[2].1])?;
+            let start_input = app.state::<AppState>().settings.get().start_input_mode;
+            let inputs = [
+                (StartInputMode::MatchIme, "IME に合わせる"),
+                (StartInputMode::Kana, "かな"),
+                (StartInputMode::Alnum, "英数"),
+            ]
+            .into_iter()
+            .map(|(m, label)| {
+                CheckMenuItem::with_id(app, input_menu_id(m), label, true, m == start_input, None::<&str>)
+                    .map(|item| (m, item))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+            let input_mode =
+                Submenu::with_items(app, "起動時の入力モード", true, &[&inputs[0].1, &inputs[1].1, &inputs[2].1])?;
             let settings = MenuItem::with_id(app, "settings", "設定…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().ok_or("アイコンがありません")?)
                 .tooltip("スズリ")
-                .menu(&Menu::with_items(app, &[&open, &settings, &appearance, &autostart, &reset, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &settings, &input_mode, &appearance, &autostart, &reset, &quit])?)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
                         // トレイから開いたときは戻り先がないので、貼り付けはしない
@@ -183,6 +207,17 @@ fn main() {
                         app.set_theme(theme.to_tauri());
                         let _ = app.emit("theme", theme);
                     }
+                    id if id.starts_with(INPUT_MENU_PREFIX) => {
+                        let Some(&(mode, _)) = inputs.iter().find(|(m, _)| input_menu_id(*m) == id) else {
+                            return;
+                        };
+                        for (m, item) in &inputs {
+                            let _ = item.set_checked(*m == mode);
+                        }
+                        if let Err(e) = app.state::<AppState>().settings.update(|f| f.start_input_mode = mode) {
+                            eprintln!("{e}");
+                        }
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -212,8 +247,6 @@ fn main() {
             commands::set_shortcuts,
             commands::suspend_shortcuts,
             commands::resume_shortcuts,
-            commands::get_letter_case,
-            commands::set_letter_case,
             commands::get_theme,
             commands::get_appearance,
             commands::set_appearance,

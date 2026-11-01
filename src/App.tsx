@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
-import { applyAppearance, engine, settings, type Appearance, type LetterCase } from "./engine";
+import { applyAppearance, engine, settings, type Appearance } from "./engine";
 import { feed, flush } from "./romaji";
 import {
   boundariesOf,
@@ -59,8 +59,8 @@ type InputMode = "kana" | "alnum";
 /** Rust の "summon" イベントの中身 */
 type Summon = {
   mode: "new" | "previous";
-  /** 呼び出し元の OS の IME が日本語入力だったか。トレイから開いたときや読めないときは null */
-  imeJapanese: boolean | null;
+  /** 始めるときの入力モード。トレイメニューの設定と呼び出し元の IME から Rust 側で決める */
+  input: InputMode;
 };
 
 const IS_MAC = navigator.userAgent.includes("Mac");
@@ -401,15 +401,10 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
-  // 打鍵ごとに問い合わせないよう、起動時に読んでおき、設定画面で変えたらイベントで受け取る
-  const letterCaseRef = useRef<LetterCase>("upper");
+  // 見た目は起動時に読んでおき、設定画面で変えたらイベントで受け取る
   useEffect(() => {
-    settings.getLetterCase().then((c) => (letterCaseRef.current = c));
     settings.getAppearance().then(applyAppearance);
-    const unlisten = [
-      listen<LetterCase>("letter-case", (e) => (letterCaseRef.current = e.payload)),
-      listen<Appearance>("appearance", (e) => applyAppearance(e.payload)),
-    ];
+    const unlisten = [listen<Appearance>("appearance", (e) => applyAppearance(e.payload))];
     return () => {
       unlisten.forEach((u) => u.then((f) => f()));
     };
@@ -422,10 +417,8 @@ export default function App() {
     const unlisten = listen<Summon>("summon", (e) => {
       closedRef.current = false;
       update(e.payload.mode === "previous" ? previousRef.current : emptySession);
-      // 呼び出し元で英字を打っていたら英数で始める。分からなければ、日本語を打つための道具なのでかなで始める
-      const input: InputMode = e.payload.imeJapanese === false ? "alnum" : "kana";
-      inputModeRef.current = input;
-      setInputModeState(input);
+      inputModeRef.current = e.payload.input;
+      setInputModeState(e.payload.input);
       setListFor(null);
       setDrag(null);
       setHover(null);
@@ -484,7 +477,7 @@ export default function App() {
           if (inputModeRef.current === "alnum") h.typeLetter(e.key);
           // CapsLock の状態によらず、Shift を押しているかで英字かローマ字かを決める
           else if (e.shiftKey && /^[a-z]$/i.test(e.key))
-            h.typeLetter(letterCaseRef.current === "lower" ? e.key.toLowerCase() : e.key.toUpperCase());
+            h.typeLetter(e.key.toUpperCase());
           else h.type(e.key);
       }
       e.preventDefault();
