@@ -244,7 +244,7 @@ UserHistory::commit(&mut self, committed: &[Committed]);
 |---|---|---|
 | オーバーレイで OS の IME を止める | 入力欄を置かず、編集できない文書にフォーカスしてキーを直接受ける（WebView は編集できない要素では IME を使わない）。実機で効かなければ IMM で入力コンテキストを外す | 同左。効かなければ表示時に英字の入力ソースへ切り替え、閉じるときに戻す |
 | 透明・最前面ウィンドウ | Tauri の設定で対応 | Tauri の `macOSPrivateApi` を有効にする |
-| 呼び出し元の IME の状態を読む | 前面のウィンドウのフォーカスのある部分の IME ウィンドウ（`ImmGetDefaultIMEWnd`）に `WM_IME_CONTROL` でオンかと変換モードを問い合わせる。応答しないアプリで待たないよう `SendMessageTimeout` で 30ms まで。キーボードの言語が日本語でなければ読まない（かなで始める）。一部のアプリ（UWP など）はオンでも 0 を返す | `TISCopyCurrentKeyboardInputSource` の ID で見分ける。`Japanese` を含めば日本語、`.Roman` で終わるか `com.apple.keylayout.` なら英字。TIS はメインスレッドから呼ぶ |
+| 呼び出し元の IME の状態を読む | 前面のウィンドウのフォーカスのある部分の IME ウィンドウ（`ImmGetDefaultIMEWnd`）に `WM_IME_CONTROL` でオンかと変換モードを問い合わせる。応答しないアプリで待たないよう `SendMessageTimeout` で 30ms まで。キーボードの言語が日本語でなければ読まない（かなで始める）。一部のアプリ（UWP など）はオンでも 0 を返す | `TISCopyCurrentKeyboardInputSource` の ID で見分ける。`Japanese` を含めば日本語、`Roman` で終わる（`.Roman`・`.FullWidthRoman`）か `com.apple.keylayout.` なら英字。TIS はメインスレッドから呼ぶ |
 | 閉じたあとのフォーカス | 呼び出し時の前面ウィンドウを覚えておき、SetForegroundWindow で戻す | スズリのアプリを隠すと直前のアプリに戻る |
 | 貼り付けのキー送信 | enigo で Ctrl+V | enigo で Cmd+V。システム設定の「アクセシビリティ」で許可が要る。許可がアプリに結びつくよう、`signingIdentity` を `-` にしてアドホック署名する（署名がないと許可が保たれない）。署名は版ごとに変わるので、更新したら許可し直す |
 

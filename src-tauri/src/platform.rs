@@ -142,8 +142,7 @@ mod macos_ime {
 
     const UTF8: u32 = 0x0800_0100;
 
-    /// 今の入力ソースの ID で見分ける。入力ソースは全体で1つなので、呼び出し元によらない。
-    /// 日本語の入力ソースは ID に Japanese を含み（ことえり・Google 日本語入力・ATOK）、その英字モードは Roman で終わる。
+    /// 今の入力ソースの ID で見分ける（`classify_input_source`）。入力ソースは全体で1つなので、呼び出し元によらない。
     /// TIS はメインスレッドから呼ぶ必要がある（ショートカットの処理はメインスレッドで動く）
     pub fn is_japanese() -> Option<bool> {
         // SAFETY: Copy で得たものは必ず解放し、Get で得たものは解放しない（CoreFoundation の決まり）
@@ -161,17 +160,22 @@ mod macos_ime {
             }
             CStr::from_ptr(buffer.as_ptr()).to_string_lossy().into_owned()
         };
-        classify(&id)
+        super::classify_input_source(&id)
     }
+}
 
-    fn classify(id: &str) -> Option<bool> {
-        if id.ends_with(".Roman") || id.starts_with("com.apple.keylayout.") {
-            Some(false)
-        } else if id.contains("Japanese") {
-            Some(true)
-        } else {
-            None
-        }
+/// macOS の入力ソースの ID が日本語入力か。英字入力なら false、日本語の入力ソースでなければ None。
+/// 日本語の入力ソースは ID に Japanese を含み（ことえり・Google 日本語入力・ATOK）、その英字モードは Roman で終わる
+/// （…Roman・…FullWidthRoman）。キーボード配列だけ（com.apple.keylayout.ABC など）も英字。
+/// OS によらずテストできるよう、macOS のモジュールの外に置く
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn classify_input_source(id: &str) -> Option<bool> {
+    if id.ends_with("Roman") || id.starts_with("com.apple.keylayout.") {
+        Some(false)
+    } else if id.contains("Japanese") {
+        Some(true)
+    } else {
+        None
     }
 }
 
@@ -232,4 +236,23 @@ pub fn send_paste() -> Result<(), String> {
     // 修飾キーは失敗しても必ず離す
     let release = enigo.key(modifier, Direction::Release);
     result.and(release).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::classify_input_source;
+
+    #[test]
+    fn classifies_macos_input_sources() {
+        // ことえり
+        assert_eq!(classify_input_source("com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese"), Some(true));
+        assert_eq!(classify_input_source("com.apple.inputmethod.Kotoeri.RomajiTyping.Roman"), Some(false));
+        assert_eq!(classify_input_source("com.apple.keylayout.ABC"), Some(false));
+        // Google 日本語入力。全角英数も英字入力とみなす
+        assert_eq!(classify_input_source("com.google.inputmethod.Japanese.base"), Some(true));
+        assert_eq!(classify_input_source("com.google.inputmethod.Japanese.Roman"), Some(false));
+        assert_eq!(classify_input_source("com.google.inputmethod.Japanese.FullWidthRoman"), Some(false));
+        // 日本語以外の入力ソース
+        assert_eq!(classify_input_source("com.apple.inputmethod.SCIM.ITABC"), None);
+    }
 }

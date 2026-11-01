@@ -324,7 +324,10 @@ export default function App() {
    */
   const paste = async () => {
     const raw = await engine.readClipboard();
-    if (closedRef.current) return;
+    if (!closedRef.current) pasteText(raw);
+  };
+
+  const pasteText = (raw: string) => {
     const text = raw
       .replace(/\r\n?/g, "\n")
       .replace(/\t/g, " ")
@@ -435,8 +438,8 @@ export default function App() {
   };
 
   const onReadingClick = (e: React.MouseEvent) => {
-    // ピンの上はピンのドラッグに使う
-    if (e.button !== 0 || (e.target as HTMLElement).closest(".pin")) return;
+    // ピンの上はピンのドラッグに使う。macOS の Control+クリックは右クリックなので除く
+    if (e.button !== 0 || (IS_MAC && e.ctrlKey) || (e.target as HTMLElement).closest(".pin")) return;
     const pos = caretFromPoint(e.clientX, e.clientY);
     moveCaret(() => pos);
   };
@@ -452,7 +455,7 @@ export default function App() {
 
   /** 文字の上で右ボタンを押したら、範囲の選択を始める。動かさずに離したらピンを足す */
   const onCharRightDown = (pos: number, e: React.PointerEvent) => {
-    if (e.button !== 2 || !sessionRef.current.segments) return;
+    if (!isRightButton(e) || !sessionRef.current.segments) return;
     const g = gapAt(pos, e);
     setRange({ from: g, to: g });
     bodyRef.current?.setPointerCapture(e.pointerId);
@@ -466,7 +469,7 @@ export default function App() {
 
   const onPinRightDown = (index: number, e: React.PointerEvent) => {
     const s = sessionRef.current;
-    if (e.button !== 2 || !s.segments) return;
+    if (!isRightButton(e) || !s.segments) return;
     const gap = boundariesOf(s.segments)[index];
     pinPressRef.current = { index, gap, x: e.clientX, y: e.clientY };
     bodyRef.current?.setPointerCapture(e.pointerId);
@@ -484,15 +487,16 @@ export default function App() {
     if (g !== null && g !== r.to) setRange({ ...r, to: g });
   };
 
-  const onRangeUp = (e: React.PointerEvent) => {
+  const onRangeUp = () => {
+    // 押したときに右ボタンと分かっているので、離したボタンは見ない（macOS で Control を先に離しても続ける）
     const press = pinPressRef.current;
-    if (press && e.button === 2) {
+    if (press) {
       pinPressRef.current = null;
       removePin(press.index);
       return;
     }
     const r = rangeRef.current;
-    if (!r || e.button !== 2) return;
+    if (!r) return;
     setRange(null);
     if (r.from === r.to) addPin(r.from);
     else mergeSelected(r.from, r.to);
@@ -637,6 +641,7 @@ export default function App() {
     deleteChunk,
     applyKey,
     paste,
+    pasteText,
     commit,
     cancel,
     moveCaret,
@@ -652,6 +657,7 @@ export default function App() {
     deleteChunk,
     applyKey,
     paste,
+    pasteText,
     commit,
     cancel,
     moveCaret,
@@ -775,6 +781,12 @@ export default function App() {
         .catch(() => handlers.current.cancel());
     };
     const noMenu = (e: MouseEvent) => e.preventDefault();
+    // macOS では Cmd+V が「編集」メニューの「ペースト」に取られ、キーの処理に届かないことがある。
+    // そのときは paste イベントで受ける（キーの処理で受けたときは既定の動きを止めているので、二重には入らない）
+    const onPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      if (!closedRef.current) handlers.current.pasteText(e.clipboardData?.getData("text/plain") ?? "");
+    };
     // ホイールは候補の切り替えに使い、スクロールは Ctrl+ホイールかスクロールバーで行う。
     // React の onWheel は passive で止められないため、ここで止める。Ctrl+ホイールの拡大縮小も止まる
     const noWheelScroll = (e: WheelEvent) => {
@@ -791,12 +803,14 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", onBlur);
     window.addEventListener("contextmenu", noMenu);
+    window.addEventListener("paste", onPaste);
     return () => {
       unlisten.then((f) => f());
       panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("contextmenu", noMenu);
+    window.removeEventListener("paste", onPaste);
     };
   }, []);
 
@@ -895,7 +909,7 @@ export default function App() {
                         className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
                         title="ドラッグで区切りを移動、右クリックで削除、右ドラッグで1文節にまとめる"
                         onPointerDown={(e) => {
-                          if (e.button === 0) {
+                          if (e.button === 0 && !(IS_MAC && e.ctrlKey)) {
                             pinDownRef.current = { pin: i - 1, x: e.clientX, y: e.clientY, at: performance.now() };
                             e.currentTarget.setPointerCapture(e.pointerId);
                           } else onPinRightDown(i - 1, e);
@@ -1011,6 +1025,11 @@ function langMode(e: KeyboardEvent): InputMode | null {
   if (e.code === "Lang2" || e.keyCode === 0x1a || e.key === "Eisu" || e.key === "NonConvert") return "alnum";
   if (e.code === "Lang1" || e.keyCode === 0x16 || e.key === "KanaMode" || e.key === "Convert") return "kana";
   return null;
+}
+
+/** 右ボタンか。macOS の Control+クリックも右クリックとして扱う */
+function isRightButton(e: React.PointerEvent) {
+  return e.button === 2 || (IS_MAC && e.button === 0 && e.ctrlKey);
 }
 
 /** 改行だけの文節か。改行は空白と同じく、それだけで1文節になる */
