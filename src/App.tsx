@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { applyAppearance, engine, settings, type Appearance } from "./engine";
+import { applyFunctionKey, isFunctionKey, type FunctionKey } from "./kana";
 import { feed, flush } from "./romaji";
 import {
   boundariesOf,
@@ -110,6 +111,9 @@ export default function App() {
     setRangeSel(r);
   };
   const [hover, setHover] = useState<number | null>(null);
+  /** F6〜F10 は、マウスを乗せている文節に効かせる。キーの処理から読むので ref にも持つ */
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
   /** 上の掴みどころ・入力モードの切り替えのどれにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
   const [topHover, setTopHover] = useState<"grabber" | "input" | null>(null);
   /** 呼び出すたびに、呼び出し元の IME に合わせて決め直す */
@@ -282,6 +286,53 @@ export default function App() {
     if (s.caret === 0) return;
     const next = { ...s, kana: splice(s.kana, s.caret - 1, 1, ""), caret: s.caret - 1 };
     edit(s, next, s.caret - 1, 1, 0);
+  };
+
+  /** カーソルの後ろの1文字を消す（Delete）。打ちかけのローマ字は先に確定させる */
+  const deleteForward = () => {
+    retypeRef.current = null;
+    typeLetter("");
+    const s = sessionRef.current;
+    if (s.caret >= length(s.kana)) return;
+    const next = { ...s, kana: splice(s.kana, s.caret, 1, "") };
+    edit(s, next, s.caret, 1, 0);
+  };
+
+  /**
+   * カーソルの前（`forward` なら後ろ）を、文節の区切りまでまとめて消す（Ctrl+Backspace・Ctrl+Delete）。
+   * `all` なら先頭（末尾）まで消す（macOS の Cmd+Backspace）。打ちかけのローマ字があれば、それだけを消す
+   */
+  const deleteChunk = (forward: boolean, all: boolean) => {
+    retypeRef.current = null;
+    const s = sessionRef.current;
+    if (s.pending !== "") {
+      update({ ...s, pending: "" });
+      return;
+    }
+    const n = length(s.kana);
+    const bs = s.segments ? boundariesOf(s.segments) : [];
+    const [from, to] = forward
+      ? [s.caret, all ? n : Math.min(n, ...bs.filter((b) => b > s.caret))]
+      : [all ? 0 : Math.max(0, ...bs.filter((b) => b < s.caret)), s.caret];
+    if (from >= to) return;
+    const next = { ...s, kana: splice(s.kana, from, to - from, ""), caret: from };
+    edit(s, next, from, to - from, 0);
+  };
+
+  /** マウスを乗せている文節を、F6〜F10 でひらがな・カタカナ・英数などに書き換える */
+  const applyKey = (key: FunctionKey) => {
+    const s = sessionRef.current;
+    const index = hoverRef.current;
+    const seg = index === null ? undefined : s.segments?.[index];
+    if (index === null || !seg || !s.segments) return;
+    const surface = applyFunctionKey(key, seg.reading);
+    // 候補にない書き方（半角カタカナなど）は、候補の最後に足して選ぶ
+    const found = seg.candidates.indexOf(surface);
+    const candidates = found < 0 ? [...seg.candidates, surface] : seg.candidates;
+    const selected = found < 0 ? candidates.length - 1 : found;
+    const segments = s.segments.map((x, i) => (i === index ? { ...x, candidates, selected } : x));
+    update({ ...s, segments });
+    setListFor(index);
   };
 
   const moveCaret = (to: (s: Session) => number) => {
@@ -538,8 +589,32 @@ export default function App() {
     };
   }, []);
 
-  const handlers = useRef({ type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode, setInputMode });
-  handlers.current = { type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode, setInputMode };
+  const handlers = useRef({
+    type,
+    typeLetter,
+    backspace,
+    deleteForward,
+    deleteChunk,
+    applyKey,
+    commit,
+    cancel,
+    moveCaret,
+    toggleMode,
+    setInputMode,
+  });
+  handlers.current = {
+    type,
+    typeLetter,
+    backspace,
+    deleteForward,
+    deleteChunk,
+    applyKey,
+    commit,
+    cancel,
+    moveCaret,
+    toggleMode,
+    setInputMode,
+  };
 
   useEffect(() => {
     const unlisten = listen<Summon>("summon", (e) => {
@@ -561,15 +636,32 @@ export default function App() {
         e.preventDefault();
         return;
       }
+      // 文節の区切りまでまとめて消す。Windows は Ctrl、macOS は Option（Cmd なら先頭・末尾まで）
+      if ((e.key === "Backspace" || e.key === "Delete") && !e.isComposing) {
+        const chunk = IS_MAC ? e.altKey && !e.metaKey && !e.ctrlKey : e.ctrlKey && !e.altKey && !e.metaKey;
+        const all = IS_MAC && e.metaKey && !e.altKey && !e.ctrlKey;
+        if (chunk || all) {
+          handlers.current.deleteChunk(e.key === "Delete", all);
+          e.preventDefault();
+          return;
+        }
+      }
       // OS の IME が動いているときの打鍵は扱わない
       if (e.isComposing || e.key === "Process" || e.ctrlKey || e.metaKey || e.altKey) return;
       const h = handlers.current;
+      if (isFunctionKey(e.key)) {
+        h.applyKey(e.key);
+        e.preventDefault();
+        return;
+      }
       switch (e.key) {
         case "Escape":
           h.cancel();
           break;
         case "Enter":
-          h.commit();
+          // Shift+Enter は改行を入れる。Enter だけなら確定する
+          if (e.shiftKey) h.typeLetter("\n");
+          else h.commit();
           break;
         case "Tab":
           h.toggleMode();
@@ -581,6 +673,9 @@ export default function App() {
           break;
         case "Backspace":
           h.backspace();
+          break;
+        case "Delete":
+          h.deleteForward();
           break;
         case "ArrowLeft":
           h.moveCaret((s) => s.caret - 1);
