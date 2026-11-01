@@ -152,9 +152,9 @@ fn main() {
             let appearance = Submenu::with_items(app, "外観", true, &[&themes[0].1, &themes[1].1, &themes[2].1])?;
             let start_input = app.state::<AppState>().settings.get().start_input_mode;
             let inputs = [
-                (StartInputMode::MatchIme, "IME に合わせる"),
                 (StartInputMode::Kana, "かな"),
                 (StartInputMode::Alnum, "英数"),
+                (StartInputMode::MatchIme, "IME に合わせる"),
             ]
             .into_iter()
             .map(|(m, label)| {

@@ -13,11 +13,11 @@ use crate::shortcuts::Bindings;
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum StartInputMode {
-    /// 呼び出し元の OS の IME に合わせる
     #[default]
-    MatchIme,
     Kana,
     Alnum,
+    /// 呼び出し元の OS の IME に合わせる
+    MatchIme,
 }
 
 /// 画面の配色。トレイメニューの「外観」で選ぶ
@@ -187,7 +187,7 @@ mod tests {
         let file: SettingsFile =
             serde_json::from_str(r#"{"shortcuts":{"new":"Ctrl+KeyK","previous":"Ctrl+Shift+KeyK"}}"#).unwrap();
         assert_eq!(file.shortcuts.new, "Ctrl+KeyK");
-        assert_eq!(file.start_input_mode, StartInputMode::MatchIme);
+        assert_eq!(file.start_input_mode, StartInputMode::Kana);
         // なくした設定の letterCase が残っていても読める
         let file: SettingsFile = serde_json::from_str(r#"{"letterCase":"lower","startInputMode":"alnum"}"#).unwrap();
         assert_eq!(file.start_input_mode, StartInputMode::Alnum);
