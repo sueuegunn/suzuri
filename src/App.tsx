@@ -223,6 +223,8 @@ export default function App() {
     typeLetter("");
     inputModeRef.current = next;
     setInputModeState(next);
+    // 呼び出し元の OS の IME も同じモードにし、戻ったあとも続けて同じモードで打てるようにする
+    engine.setImeJapanese(next === "kana");
   };
 
   const toggleMode = () => {
@@ -430,6 +432,13 @@ export default function App() {
       window.focus();
     });
     const onKey = (e: KeyboardEvent) => {
+      // 英数・かなのキー。名前が付かず、物理的な位置（Lang2・Lang1）でしか見分けられないことがある
+      const lang = langMode(e);
+      if (lang) {
+        handlers.current.setInputMode(lang);
+        e.preventDefault();
+        return;
+      }
       // OS の IME が動いているときの打鍵は扱わない
       if (e.isComposing || e.key === "Process" || e.ctrlKey || e.metaKey || e.altKey) return;
       const h = handlers.current;
@@ -462,15 +471,6 @@ export default function App() {
           break;
         case "End":
           h.moveCaret((s) => length(s.kana));
-          break;
-        // JIS 配列の Mac の英数・かなキーと、Windows の無変換・変換キーは、それぞれのモードにする
-        case "Eisu":
-        case "NonConvert":
-          h.setInputMode("alnum");
-          break;
-        case "KanaMode":
-        case "Convert":
-          h.setInputMode("kana");
           break;
         // Windows の半角/全角キーは切り替える
         case "Hankaku":
@@ -709,6 +709,17 @@ function InputModeButton({
       {label}
     </button>
   );
+}
+
+/**
+ * 英数・かなのモードを決めるキーなら、そのモード。
+ * Lang2・Lang1 は Mac の英数・かなキーと、Windows で無変換・変換に IME オフ・オンを割り当てたとき
+ * （VK_IME_OFF・VK_IME_ON。key は Unidentified で届く）。割り当てていない無変換・変換は名前で届く
+ */
+function langMode(e: KeyboardEvent): InputMode | null {
+  if (e.code === "Lang2" || e.keyCode === 0x1a || e.key === "Eisu" || e.key === "NonConvert") return "alnum";
+  if (e.code === "Lang1" || e.keyCode === 0x16 || e.key === "KanaMode" || e.key === "Convert") return "kana";
+  return null;
 }
 
 /** 案内の項目の区切り */

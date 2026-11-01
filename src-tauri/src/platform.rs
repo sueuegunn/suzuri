@@ -53,12 +53,22 @@ pub fn ime_is_japanese(caller: Option<Caller>) -> Option<bool> {
     }
 }
 
+/// 呼び出し元の OS の IME を、日本語入力（オンでひらがな）か英字入力（オフ）にする。
+/// macOS はまだ切り替えない
+pub fn set_ime_japanese(caller: Caller, japanese: bool) {
+    #[cfg(windows)]
+    windows_ime::set_japanese(caller, japanese);
+    #[cfg(not(windows))]
+    let _ = (caller, japanese);
+}
+
 #[cfg(windows)]
 mod windows_ime {
     use std::mem;
     use std::ptr;
 
-    use windows_sys::Win32::UI::Input::Ime::{IME_CMODE_NATIVE, ImmGetDefaultIMEWnd};
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Input::Ime::{IME_CMODE_FULLSHAPE, IME_CMODE_KATAKANA, IME_CMODE_NATIVE, ImmGetDefaultIMEWnd};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetKeyboardLayout;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GUITHREADINFO, GetGUIThreadInfo, GetWindowThreadProcessId, SMTO_ABORTIFHUNG, SendMessageTimeoutW,
@@ -69,7 +79,9 @@ mod windows_ime {
 
     // WM_IME_CONTROL の wParam。windows-sys に定義がないので imm.h の値を書く
     const IMC_GETCONVERSIONMODE: usize = 0x0001;
+    const IMC_SETCONVERSIONMODE: usize = 0x0002;
     const IMC_GETOPENSTATUS: usize = 0x0005;
+    const IMC_SETOPENSTATUS: usize = 0x0006;
     /// 日本語の言語 ID
     const LANG_JAPANESE: usize = 0x0411;
     /// 応答しないアプリでオーバーレイを出すのが遅れないよう、待つのはここまで
@@ -78,7 +90,34 @@ mod windows_ime {
     /// 前面のウィンドウのうち入力を受けている部分の IME に、オンか・日本語の変換モードかを問い合わせる。
     /// 別のプロセスのウィンドウにも使えるが、一部のアプリ（UWP など）はオンでも 0 を返す
     pub fn is_japanese(caller: Caller) -> Option<bool> {
-        let hwnd = caller.0 as _;
+        let ime = ime_window(caller)?;
+        let open = send(ime, IMC_GETOPENSTATUS, 0)? != 0;
+        // IME がオンでも、半角英数の変換モードなら英字入力
+        Some(open && send(ime, IMC_GETCONVERSIONMODE, 0)? as u32 & IME_CMODE_NATIVE != 0)
+    }
+
+    /// 日本語入力はオンにしてひらがなの変換モードに、英字入力はオフにする
+    pub fn set_japanese(caller: Caller, japanese: bool) {
+        let Some(ime) = ime_window(caller) else {
+            return;
+        };
+        let _ = send(ime, IMC_SETOPENSTATUS, japanese as isize);
+        if !japanese {
+            return;
+        }
+        // 半角英数やカタカナの変換モードだったら、ローマ字入力などほかの設定は保ってひらがなにする
+        if let Some(mode) = send(ime, IMC_GETCONVERSIONMODE, 0) {
+            let mode = mode as u32;
+            let hiragana = (mode & !IME_CMODE_KATAKANA) | IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+            if hiragana != mode {
+                let _ = send(ime, IMC_SETCONVERSIONMODE, hiragana as isize);
+            }
+        }
+    }
+
+    /// 呼び出し元のうち入力を受けている部分の IME ウィンドウ。日本語の IME を使っていなければ None
+    fn ime_window(caller: Caller) -> Option<HWND> {
+        let hwnd = caller.0 as HWND;
         // SAFETY: どの関数も、無効なウィンドウやスレッドを渡すと失敗（0 や null）を返すだけ
         unsafe {
             let thread = GetWindowThreadProcessId(hwnd, ptr::null_mut());
@@ -97,18 +136,18 @@ mod windows_ime {
                 hwnd
             };
             let ime = ImmGetDefaultIMEWnd(focus);
-            if ime.is_null() {
-                return None;
-            }
-            let ask = |command: usize| {
-                let mut result = 0usize;
-                let ok = SendMessageTimeoutW(ime, WM_IME_CONTROL, command, 0, SMTO_ABORTIFHUNG, TIMEOUT_MS, &mut result);
-                (ok != 0).then_some(result)
-            };
-            let open = ask(IMC_GETOPENSTATUS)? != 0;
-            // IME がオンでも、半角英数の変換モードなら英字入力
-            Some(open && ask(IMC_GETCONVERSIONMODE)? as u32 & IME_CMODE_NATIVE != 0)
+            (!ime.is_null()).then_some(ime)
         }
+    }
+
+    /// IME ウィンドウに WM_IME_CONTROL を送る。応答がなければ None
+    fn send(ime: HWND, command: usize, value: isize) -> Option<usize> {
+        let mut result = 0usize;
+        // SAFETY: 無効なウィンドウなら失敗（0）を返すだけ
+        let ok = unsafe {
+            SendMessageTimeoutW(ime, WM_IME_CONTROL, command, value, SMTO_ABORTIFHUNG, TIMEOUT_MS, &mut result)
+        };
+        (ok != 0).then_some(result)
     }
 }
 
