@@ -405,7 +405,34 @@ export default function App() {
       }
     }
     if (!best) return 0;
+    // 改行は行の右端に幅 0 で置かれる。その右を押しても次の行の先頭にせず、改行の手前に置く
+    if (Array.from(sessionRef.current.kana)[best.pos] === "\n") return best.pos;
     return x < best.r.left + best.r.width / 2 ? best.pos : best.pos + 1;
+  };
+
+  /**
+   * ↑↓で、入力カーソルの横の位置のまま上・下の行に動かす。上・下に行がなければ先頭・末尾に動かす
+   */
+  const moveVertical = (dir: -1 | 1) => {
+    const body = bodyRef.current;
+    const caret = body?.querySelector<HTMLElement>(".caret")?.getBoundingClientRect();
+    if (!body || !caret) return;
+    const mid = (r: DOMRect) => (r.top + r.bottom) / 2;
+    // 今の行より上（下）にある文字のうち、一番近い行
+    let target: number | null = null;
+    for (const el of body.querySelectorAll<HTMLElement>("[data-pos]")) {
+      const r = el.getBoundingClientRect();
+      const beyond = dir < 0 ? mid(r) < caret.top : mid(r) > caret.bottom;
+      if (beyond && (target === null || Math.abs(mid(r) - mid(caret)) < Math.abs(target - mid(caret)))) {
+        target = mid(r);
+      }
+    }
+    if (target === null) {
+      moveCaret((s) => (dir < 0 ? 0 : length(s.kana)));
+      return;
+    }
+    const pos = caretFromPoint(caret.left, target);
+    moveCaret(() => pos);
   };
 
   const onReadingClick = (e: React.MouseEvent) => {
@@ -614,6 +641,7 @@ export default function App() {
     commit,
     cancel,
     moveCaret,
+    moveVertical,
     toggleMode,
     setInputMode,
   });
@@ -628,6 +656,7 @@ export default function App() {
     commit,
     cancel,
     moveCaret,
+    moveVertical,
     toggleMode,
     setInputMode,
   };
@@ -704,6 +733,12 @@ export default function App() {
           break;
         case "ArrowRight":
           h.moveCaret((s) => s.caret + 1);
+          break;
+        case "ArrowUp":
+          h.moveVertical(-1);
+          break;
+        case "ArrowDown":
+          h.moveVertical(1);
           break;
         case "Home":
           h.moveCaret(() => 0);
