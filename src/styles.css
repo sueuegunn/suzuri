@@ -129,7 +129,7 @@ body {
 
 .reading {
   /* 1行目のピンの頭が、上の英数・かなの切り替えに重ならないようにする */
-  padding-top: 6px;
+  padding-top: 10px;
   font-size: calc(24px * var(--text-scale));
   /* ピンの頭が上の行に重ならないよう、行の間をあける */
   line-height: 1.9;
