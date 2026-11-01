@@ -111,6 +111,13 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* 下段（変換後）は句読点や漢字で上段より行が少なくなりがちなので、区切りの線を上段の1行分下げる。
+   基準の大きさを2行分にすると、余りを上下で半分ずつ分けるので、ちょうど1行分の差になる。
+   文字を大きくした小さいウィンドウで下段が潰れないよう、30% までにする */
+.reading-area {
+  flex-basis: min(calc(2 * 24px * 1.9 * var(--text-scale)), 30%);
+}
+
 .result-area {
   margin-top: 12px;
   padding-top: 12px;
@@ -259,11 +266,11 @@ body {
 }
 
 /* 上の余白の中央に常に出す、動かすための掴みどころ。線を入れると引き下ろせるように見えるので、カプセルだけにする */
-/* 上の中央。掴みどころの左右に入力モードの切り替えを置く。掴みどころの中心はこれまでどおり上から 26.5px */
+/* 上の中央。掴みどころの左右に入力モードの切り替えを置く */
 .top-bar {
   position: absolute;
   z-index: 3;
-  top: 15.5px;
+  top: 19.5px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
