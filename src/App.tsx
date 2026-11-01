@@ -319,6 +319,35 @@ export default function App() {
     run(s.kana, s.segments, call);
   };
 
+  /**
+   * 上段で左クリックした点に一番近い、入力カーソルを置ける位置。文字の上でなくても（行の右の余白や
+   * 最後の行の下でも）、縦に一番近い行の中で横に一番近い文字の、近い側に置く
+   */
+  const caretFromPoint = (x: number, y: number) => {
+    const els = bodyRef.current?.querySelectorAll<HTMLElement>("[data-pos]") ?? [];
+    let best: { pos: number; r: DOMRect } | null = null;
+    let bestRow = Infinity;
+    let bestCol = Infinity;
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      const row = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      const col = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      if (row < bestRow || (row === bestRow && col < bestCol)) {
+        best = { pos: Number(el.dataset.pos), r };
+        [bestRow, bestCol] = [row, col];
+      }
+    }
+    if (!best) return 0;
+    return x < best.r.left + best.r.width / 2 ? best.pos : best.pos + 1;
+  };
+
+  const onReadingClick = (e: React.MouseEvent) => {
+    // ピンの上はピンのドラッグに使う
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".pin")) return;
+    const pos = caretFromPoint(e.clientX, e.clientY);
+    moveCaret(() => pos);
+  };
+
   /** 画面上の点にある文字の、近い側の隙間。文字の上でなければ null */
   const gapFromPoint = (x: number, y: number) => {
     const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-pos]");
@@ -623,7 +652,6 @@ export default function App() {
             <span
               className={"char" + (inRange(pos) ? " range-select" : "")}
               data-pos={pos}
-              onClick={(e) => moveCaret(() => gapAt(pos, e))}
               onPointerDown={(e) => onCharRightDown(pos, e)}
             >
               {c}
@@ -680,6 +708,7 @@ export default function App() {
         <div
           className="area reading-area"
           ref={bodyRef}
+          onClick={onReadingClick}
           onPointerMove={onRangeMove}
           onPointerUp={onRangeUp}
           onPointerCancel={() => {
