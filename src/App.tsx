@@ -833,7 +833,8 @@ export default function App() {
             {segments
               ? segments.map((seg, i) => (
                   <Fragment key={`${seg.start}:${seg.end}`}>
-                    {i > 0 && (
+                    {/* 改行の前後は行が変わるので区切りは明らか。ピンは出さない（区切りとしては残る） */}
+                    {i > 0 && !isLineBreak(segments[i - 1]) && !isLineBreak(seg) && (
                       <span
                         className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
                         title="ドラッグで区切りを移動、右クリックで削除、右ドラッグで1文節にまとめる"
@@ -954,6 +955,11 @@ function langMode(e: KeyboardEvent): InputMode | null {
   if (e.code === "Lang2" || e.keyCode === 0x1a || e.key === "Eisu" || e.key === "NonConvert") return "alnum";
   if (e.code === "Lang1" || e.keyCode === 0x16 || e.key === "KanaMode" || e.key === "Convert") return "kana";
   return null;
+}
+
+/** 改行だけの文節か。改行は空白と同じく、それだけで1文節になる */
+function isLineBreak(seg: Segment) {
+  return seg.reading === "\n";
 }
 
 /** 案内の項目の区切り */
