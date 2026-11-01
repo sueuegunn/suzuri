@@ -32,6 +32,8 @@ const WHEEL_IDLE_MS = 300;
 const WHEEL_LINE_PX = 40;
 /** ピンの上で右ボタンを押してからこれだけ動かしたら、範囲の選択に移る */
 const PIN_DRAG_START_PX = 4;
+/** ピンの上で左ボタンを押してからこれより短く離し、ほとんど動かさなければ、クリックとみなして入力カーソルを置く */
+const PIN_CLICK_MS = 300;
 /** 候補一覧に並べる数 */
 const CANDIDATE_LIST_SIZE = 9;
 
@@ -492,8 +494,24 @@ export default function App() {
     if (p) setDrag({ pin, target, ...p });
   };
 
-  const onPinUp = (pin: number) => {
+  /** ピンの上で左ボタンを押したところ。すぐに、ほとんど動かさずに離したらクリックとみなす */
+  const pinDownRef = useRef<{ pin: number; x: number; y: number; at: number } | null>(null);
+
+  const onPinUp = (pin: number, e: React.PointerEvent) => {
     const s = sessionRef.current;
+    const down = pinDownRef.current;
+    pinDownRef.current = null;
+    const clicked =
+      down?.pin === pin &&
+      performance.now() - down.at < PIN_CLICK_MS &&
+      Math.hypot(e.clientX - down.x, e.clientY - down.y) < PIN_DRAG_START_PX;
+    if (clicked && s.segments) {
+      // ピンの位置（文節の区切り）に入力カーソルを置く
+      const gap = boundariesOf(s.segments)[pin];
+      setDrag(null);
+      moveCaret(() => gap);
+      return;
+    }
     if (drag && drag.pin === pin && s.segments) {
       const bs = boundariesOf(s.segments);
       if (bs[pin] !== drag.target) {
@@ -725,11 +743,13 @@ export default function App() {
                         className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
                         title="ドラッグで区切りを移動、右クリックで削除、右ドラッグで1文節にまとめる"
                         onPointerDown={(e) => {
-                          if (e.button === 0) e.currentTarget.setPointerCapture(e.pointerId);
-                          else onPinRightDown(i - 1, e);
+                          if (e.button === 0) {
+                            pinDownRef.current = { pin: i - 1, x: e.clientX, y: e.clientY, at: performance.now() };
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                          } else onPinRightDown(i - 1, e);
                         }}
                         onPointerMove={(e) => onPinMove(i - 1, e)}
-                        onPointerUp={() => onPinUp(i - 1)}
+                        onPointerUp={(e) => onPinUp(i - 1, e)}
                       />
                     )}
                     <span className={segClass(i)} {...segHandlers(i)}>
