@@ -319,6 +319,20 @@ export default function App() {
     edit(s, next, from, to - from, 0);
   };
 
+  /**
+   * クリップボードの文字をカーソル位置に入れる。ローマ字にはせず、漢字も英字もそのまま読みに入れる。
+   * 改行は \n にそろえ、タブは空白に、ほかの制御文字は捨てる
+   */
+  const paste = async () => {
+    const raw = await engine.readClipboard();
+    if (closedRef.current) return;
+    const text = raw
+      .replace(/\r\n?/g, "\n")
+      .replace(/\t/g, " ")
+      .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, "");
+    if (text !== "") handlers.current.typeLetter(text);
+  };
+
   /** マウスを乗せている文節を、F6〜F10 でひらがな・カタカナ・英数などに書き換える */
   const applyKey = (key: FunctionKey) => {
     const s = sessionRef.current;
@@ -596,6 +610,7 @@ export default function App() {
     deleteForward,
     deleteChunk,
     applyKey,
+    paste,
     commit,
     cancel,
     moveCaret,
@@ -609,6 +624,7 @@ export default function App() {
     deleteForward,
     deleteChunk,
     applyKey,
+    paste,
     commit,
     cancel,
     moveCaret,
@@ -633,6 +649,12 @@ export default function App() {
       const lang = langMode(e);
       if (lang) {
         handlers.current.setInputMode(lang);
+        e.preventDefault();
+        return;
+      }
+      // 貼り付け。Windows は Ctrl+V、macOS は Cmd+V
+      if ((IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && e.code === "KeyV") {
+        handlers.current.paste();
         e.preventDefault();
         return;
       }

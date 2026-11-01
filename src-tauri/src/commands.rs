@@ -188,6 +188,12 @@ pub fn reset_window_geometry(state: State<'_, AppState>) -> Result<(), String> {
     })
 }
 
+/// クリップボードの文字（オーバーレイに貼り付けるとき）。文字でなければ空
+#[tauri::command]
+pub fn read_clipboard(app: AppHandle) -> String {
+    app.clipboard().read_text().unwrap_or_default()
+}
+
 /// 呼び出し元の OS の IME を、日本語入力か英字入力にする（オーバーレイで英数・かなを切り替えたとき）
 #[tauri::command]
 pub fn set_ime_japanese(state: State<'_, AppState>, japanese: bool) {

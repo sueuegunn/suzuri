@@ -26,6 +26,8 @@ export const engine = {
   cancel: () => invoke<void>("cancel"),
   /** オーバーレイを今いるモニターの中央に戻す */
   center: () => invoke<void>("center_overlay"),
+  /** クリップボードの文字。文字でなければ空 */
+  readClipboard: () => invoke<string>("read_clipboard"),
   /** 呼び出し元の OS の IME を、日本語入力（true）か英字入力（false）にする */
   setImeJapanese: (japanese: boolean) => invoke<void>("set_ime_japanese", { japanese }),
 };

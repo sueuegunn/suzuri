@@ -254,6 +254,7 @@ fn main() {
             commands::reset_window_geometry,
             commands::center_overlay,
             commands::set_ime_japanese,
+            commands::read_clipboard,
         ])
         .run(tauri::generate_context!())
         .expect("スズリを起動できません");
