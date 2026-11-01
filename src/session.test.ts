@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carrySelections, clampPin, rangeAround, retypeRange, shiftBoundaries, splice } from "./session";
+import { carrySelections, clampPin, mergeRange, rangeAround, retypeRange, shiftBoundaries, splice } from "./session";
 
 describe("shiftBoundaries", () => {
   it("adds text typed at a boundary to the left segment", () => {
@@ -62,4 +62,35 @@ describe("clampPin", () => {
 
 it("splices by character", () => {
   expect(splice("わたし", 1, 1, "ゔぁ")).toBe("わゔぁし");
+});
+
+describe("mergeRange", () => {
+  // わたしは|はしを|わたる（0..4, 4..7, 7..10）
+  const bs = [4, 7];
+
+  it("文節の途中から途中までを1文節にし、両側の残りを外隣とあわせて区切り直す", () => {
+    // 「しははし」（2..6）を選ぶ。左の「わた」は先頭まで、右の「を」は「わたる」とあわせて区切り直す
+    expect(mergeRange(bs, [], 2, 6, 10)).toEqual({ boundaries: [2, 6, 7], pinned: [2, 6], ranges: [[0, 2], [6, 10]] });
+  });
+
+  it("逆向きに選んでも同じ", () => {
+    expect(mergeRange(bs, [], 6, 2, 10)).toEqual(mergeRange(bs, [], 2, 6, 10));
+  });
+
+  it("両端が区切りちょうどなら、ほかの文節は区切り直さない", () => {
+    expect(mergeRange(bs, [], 0, 7, 10)).toEqual({ boundaries: [7], pinned: [7], ranges: [] });
+  });
+
+  it("手で決めた区切りは越えずに区切り直す", () => {
+    expect(mergeRange(bs, [4], 5, 6, 10)?.ranges).toEqual([[4, 5], [6, 10]]);
+    expect(mergeRange(bs, [7], 5, 6, 10)?.ranges).toEqual([[0, 5], [6, 7]]);
+  });
+
+  it("内側の手で決めた区切りは外す", () => {
+    expect(mergeRange(bs, [4], 2, 8, 10)?.pinned).toEqual([2, 8]);
+  });
+
+  it("空の範囲なら null", () => {
+    expect(mergeRange(bs, [], 3, 3, 10)).toBeNull();
+  });
 });

@@ -127,6 +127,11 @@ body {
   white-space: pre-wrap;
 }
 
+/* 右ドラッグで1文節にまとめようとしている範囲 */
+.char.range-select {
+  background: var(--active);
+}
+
 .reading {
   /* 1行目のピンの頭が、上の英数・かなの切り替えに重ならないようにする */
   padding-top: 10px;

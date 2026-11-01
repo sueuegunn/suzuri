@@ -46,6 +46,16 @@ fn main() {
     engine.convert_with_boundaries(s, &boundaries, &empty);
     println!("区切り指定での再変換（{}文字）: {:?}", n, t.elapsed());
 
+    // 右ドラッグで選んだ範囲を1文節にし、その両側を区切り直したとき
+    let (from, to) = (n / 3, n / 2);
+    let mut merged: Vec<usize> = boundaries.iter().copied().filter(|&b| b <= from || b >= to).collect();
+    merged.extend([from, to]);
+    merged.sort_unstable();
+    merged.dedup();
+    let t = Instant::now();
+    engine.resegment_ranges(s, &merged, &[0..from, to..n], &empty);
+    println!("範囲を1文節にしての再変換（{}文字）: {:?}", n, t.elapsed());
+
     // 学習が上限まで溜まった状態
     let mut full = UserHistory::new(DEFAULT_CAPACITY);
     for i in 0..DEFAULT_CAPACITY {

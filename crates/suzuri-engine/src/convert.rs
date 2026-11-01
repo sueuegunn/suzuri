@@ -87,7 +87,7 @@ impl Engine {
     /// 読みを自動で文節に区切り、各文節の候補を返す
     pub fn convert(&self, reading: &str, history: &UserHistory) -> Conversion {
         let n = reading.chars().count();
-        self.run(reading, &[], 0..n, history)
+        self.run(reading, &[], std::slice::from_ref(&(0..n)), history)
     }
 
     /// ユーザーが決めた区切り（文字位置）に従って、各文節の候補を返す
@@ -97,7 +97,7 @@ impl Engine {
         boundaries: &[usize],
         history: &UserHistory,
     ) -> Conversion {
-        self.run(reading, boundaries, 0..0, history)
+        self.run(reading, boundaries, &[], history)
     }
 
     /// `boundaries` は保ったまま、`range` の内側だけ自動で区切り直す。
@@ -109,16 +109,30 @@ impl Engine {
         range: Range<usize>,
         history: &UserHistory,
     ) -> Conversion {
-        self.run(reading, boundaries, range, history)
+        self.run(reading, boundaries, &[range], history)
+    }
+
+    /// `boundaries` は保ったまま、`ranges` のそれぞれの内側だけ自動で区切り直す。
+    /// 選んだ範囲を1文節にしたとき、その両側に残った部分を区切り直すのに使う
+    pub fn resegment_ranges(
+        &self,
+        reading: &str,
+        boundaries: &[usize],
+        ranges: &[Range<usize>],
+        history: &UserHistory,
+    ) -> Conversion {
+        self.run(reading, boundaries, ranges, history)
     }
 
     fn run(
         &self,
         reading: &str,
         boundaries: &[usize],
-        auto: Range<usize>,
+        auto: &[Range<usize>],
         history: &UserHistory,
     ) -> Conversion {
+        // 自動で区切る範囲の内側か（範囲の端は固定した区切りとして残す）
+        let inside = |p: usize| auto.iter().any(|r| r.start < p && p < r.end);
         if reading.is_empty() {
             return Conversion { segments: vec![] };
         }
@@ -127,7 +141,7 @@ impl Engine {
         let mut fixed: Vec<usize> = boundaries
             .iter()
             .copied()
-            .filter(|&b| 0 < b && b < n && !(auto.start < b && b < auto.end))
+            .filter(|&b| 0 < b && b < n && !inside(b))
             .collect();
         fixed.sort_unstable();
         fixed.dedup();
@@ -142,14 +156,14 @@ impl Engine {
         let mut cuts = fixed;
         for w in path.windows(2) {
             let (a, b) = (&lat.nodes[w[0]], &lat.nodes[w[1]]);
-            if auto.start < b.start && b.start < auto.end && self.dict.is_boundary(a.rid, b.lid) {
+            if inside(b.start) && self.dict.is_boundary(a.rid, b.lid) {
                 cuts.push(b.start);
             }
         }
         // スペースは前後の語と切り離し、それだけで1文節にする
         for (i, c) in reading.chars().enumerate() {
             if c.is_whitespace() {
-                cuts.extend([i, i + 1].into_iter().filter(|&p| 0 < p && p < n && auto.start < p && p < auto.end));
+                cuts.extend([i, i + 1].into_iter().filter(|&p| 0 < p && p < n && inside(p)));
             }
         }
         cuts.sort_unstable();
@@ -502,6 +516,21 @@ mod tests {
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
         let c = e.resegment("わたしははしをわたる", &[2], 4..10, &UserHistory::default());
         assert_eq!(c.segments[0].end, 2);
+    }
+
+    #[test]
+    fn resegments_several_ranges() {
+        let e = engine();
+        let h = UserHistory::default();
+        // 4..7 を1文節に固定し、その両側（0..4 と 7..10）をそれぞれ自動で区切る
+        let c = e.resegment_ranges("わたしははしをわたる", &[1, 4, 7, 9], &[0..4, 7..10], &h);
+        assert_eq!(view(&c), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
+        // 範囲の外の区切りは保つ
+        let c = e.resegment_ranges("わたしははしをわたる", &[2, 4, 7], std::slice::from_ref(&(7..10)), &h);
+        assert_eq!(c.segments[0].end, 2);
+        // 範囲がなければ区切りの指定どおり
+        let c = e.resegment_ranges("わたしははし", &[2], &[], &h);
+        assert_eq!(view(&c), [(0, 2, "綿"), (2, 6, "氏は橋")]);
     }
 
     #[test]

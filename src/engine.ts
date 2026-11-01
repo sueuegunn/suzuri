@@ -18,6 +18,9 @@ export const engine = {
     invoke<EngineSegment[]>("convert_with_boundaries", { reading, boundaries }),
   resegment: (reading: string, boundaries: number[], start: number, end: number) =>
     invoke<EngineSegment[]>("resegment", { reading, boundaries, start, end }),
+  /** ranges のそれぞれ [start, end) の内側だけ自動で区切り直す */
+  resegmentRanges: (reading: string, boundaries: number[], ranges: [number, number][]) =>
+    invoke<EngineSegment[]>("resegment_ranges", { reading, boundaries, ranges }),
   commit: (text: string, segments: Committed[], paste: boolean) =>
     invoke<void>("commit", { text, segments, paste }),
   cancel: () => invoke<void>("cancel"),

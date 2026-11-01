@@ -85,6 +85,42 @@ export function retypeRange(
   return [Math.max(0, ...boundaries.filter((b) => b < start)), end];
 }
 
+/**
+ * `from`〜`to` の文字を1つの文節にしたときの区切りと手で決めた区切り、自動で区切り直す範囲。
+ * 内側の区切りは外し、両端を手で決めた区切りにする。両端が文節の途中だったら、
+ * 外に残った部分をその外隣の文節とあわせて区切り直す（残りが助詞だけになったら隣に付けられるように）。
+ * ただし手で決めた区切りは越えない。範囲が空なら null
+ */
+export function mergeRange(
+  boundaries: number[],
+  pinned: number[],
+  from: number,
+  to: number,
+  n: number,
+): { boundaries: number[]; pinned: number[]; ranges: [number, number][] } | null {
+  [from, to] = [Math.max(0, Math.min(from, to)), Math.min(n, Math.max(from, to))];
+  if (from >= to) return null;
+  const ends = [from, to].filter((b) => b > 0 && b < n);
+  const keep = (b: number) => b < from || b > to;
+  const ranges: [number, number][] = [];
+  // 左に残った部分。from が文節の途中のときだけ
+  const left = Math.max(0, ...boundaries.filter((b) => b <= from));
+  if (left < from) {
+    const start = left === 0 || pinned.includes(left) ? left : Math.max(0, ...boundaries.filter((b) => b < left));
+    ranges.push([start, from]);
+  }
+  const right = Math.min(n, ...boundaries.filter((b) => b >= to));
+  if (to < right) {
+    const end = right === n || pinned.includes(right) ? right : Math.min(n, ...boundaries.filter((b) => b > right));
+    ranges.push([to, end]);
+  }
+  return {
+    boundaries: [...new Set([...boundaries.filter(keep), ...ends])].sort((a, b) => a - b),
+    pinned: [...new Set([...pinned.filter(keep), ...ends])].sort((a, b) => a - b),
+    ranges,
+  };
+}
+
 /** ひらがなを直す前の文字位置を、直したあとの位置に読み替える */
 export function shiftPosition(x: number, pos: number, removed: number, inserted: number): number {
   if (x <= pos) return x;

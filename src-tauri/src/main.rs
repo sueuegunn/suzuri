@@ -241,6 +241,7 @@ fn main() {
             commands::convert,
             commands::convert_with_boundaries,
             commands::resegment,
+            commands::resegment_ranges,
             commands::commit,
             commands::cancel,
             commands::get_shortcuts,

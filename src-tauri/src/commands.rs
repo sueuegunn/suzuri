@@ -64,6 +64,19 @@ pub fn resegment(
     to_dto(state.engine.resegment(&reading, &boundaries, start..end, &history))
 }
 
+/// `ranges` のそれぞれの内側だけ自動で区切り直す（右ドラッグで選んだ範囲を1文節にしたとき）
+#[tauri::command(async)]
+pub fn resegment_ranges(
+    state: State<'_, AppState>,
+    reading: String,
+    boundaries: Vec<usize>,
+    ranges: Vec<(usize, usize)>,
+) -> Vec<SegmentDto> {
+    let history = state.history.lock().unwrap();
+    let ranges: Vec<_> = ranges.into_iter().map(|(start, end)| start..end).collect();
+    to_dto(state.engine.resegment_ranges(&reading, &boundaries, &ranges, &history))
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommittedDto {

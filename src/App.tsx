@@ -10,6 +10,7 @@ import {
   clampPin,
   emptySession,
   length,
+  mergeRange,
   retypeRange,
   resultText,
   shiftBoundaries,
@@ -97,6 +98,13 @@ export default function App() {
   const [listFor, setListFor] = useState<number | null>(null);
   const wheel = useRef({ acc: 0, index: -1, at: 0 });
   const [drag, setDrag] = useState<Drag | null>(null);
+  /** 右ドラッグで選んでいる範囲（押した位置と今の位置の隙間の番号）。離したら1文節にまとめる */
+  const [rangeSel, setRangeSel] = useState<{ from: number; to: number } | null>(null);
+  const rangeRef = useRef(rangeSel);
+  const setRange = (r: { from: number; to: number } | null) => {
+    rangeRef.current = r;
+    setRangeSel(r);
+  };
   const [hover, setHover] = useState<number | null>(null);
   /** 上の掴みどころ・入力モードの切り替えのどれにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
   const [topHover, setTopHover] = useState<"grabber" | "input" | null>(null);
@@ -145,6 +153,7 @@ export default function App() {
     update(emptySession);
     setListFor(null);
     setDrag(null);
+    setRange(null);
     return afterPaint();
   };
 
@@ -295,6 +304,51 @@ export default function App() {
     );
   };
 
+  /** `from`〜`to` の文字を1文節にまとめ、両側に残った部分を区切り直す */
+  const mergeSelected = (from: number, to: number) => {
+    const s = sessionRef.current;
+    if (!s.segments) return;
+    const m = mergeRange(boundariesOf(s.segments), s.pinned, from, to, length(s.kana));
+    if (!m) return;
+    update({ ...s, pinned: m.pinned });
+    const call = m.ranges.length
+      ? engine.resegmentRanges(s.kana, m.boundaries, m.ranges)
+      : engine.convertWithBoundaries(s.kana, m.boundaries);
+    run(s.kana, s.segments, call);
+  };
+
+  /** 画面上の点にある文字の、近い側の隙間。文字の上でなければ null */
+  const gapFromPoint = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-pos]");
+    if (!el || !bodyRef.current?.contains(el)) return null;
+    const r = el.getBoundingClientRect();
+    const pos = Number(el.dataset.pos);
+    return x < r.left + r.width / 2 ? pos : pos + 1;
+  };
+
+  /** 文字の上で右ボタンを押したら、範囲の選択を始める。動かさずに離したらピンを足す */
+  const onCharRightDown = (pos: number, e: React.PointerEvent) => {
+    if (e.button !== 2 || !sessionRef.current.segments) return;
+    const g = gapAt(pos, e);
+    setRange({ from: g, to: g });
+    bodyRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  const onRangeMove = (e: React.PointerEvent) => {
+    const r = rangeRef.current;
+    if (!r) return;
+    const g = gapFromPoint(e.clientX, e.clientY);
+    if (g !== null && g !== r.to) setRange({ ...r, to: g });
+  };
+
+  const onRangeUp = (e: React.PointerEvent) => {
+    const r = rangeRef.current;
+    if (!r || e.button !== 2) return;
+    setRange(null);
+    if (r.from === r.to) addPin(r.from);
+    else mergeSelected(r.from, r.to);
+  };
+
   const removePin = (index: number) => {
     const s = sessionRef.current;
     if (!s.segments) return;
@@ -421,6 +475,7 @@ export default function App() {
       setInputModeState(e.payload.input);
       setListFor(null);
       setDrag(null);
+      setRange(null);
       setHover(null);
       window.focus();
     });
@@ -528,6 +583,9 @@ export default function App() {
       </span>
     );
 
+  const inRange = (pos: number) =>
+    rangeSel !== null && pos >= Math.min(rangeSel.from, rangeSel.to) && pos < Math.max(rangeSel.from, rangeSel.to);
+
   const chars = (text: string, offset: number, isLast: boolean) => (
     <>
       {Array.from(text).map((c, j) => {
@@ -536,10 +594,10 @@ export default function App() {
           <Fragment key={pos}>
             {caretMark(pos)}
             <span
-              className="char"
+              className={"char" + (inRange(pos) ? " range-select" : "")}
               data-pos={pos}
               onClick={(e) => moveCaret(() => gapAt(pos, e))}
-              onContextMenu={(e) => addPin(gapAt(pos, e))}
+              onPointerDown={(e) => onCharRightDown(pos, e)}
             >
               {c}
             </span>
@@ -592,7 +650,13 @@ export default function App() {
         />
       </div>
       <div className="panel" ref={panelRef} onPointerDown={startMove}>
-        <div className="area reading-area" ref={bodyRef}>
+        <div
+          className="area reading-area"
+          ref={bodyRef}
+          onPointerMove={onRangeMove}
+          onPointerUp={onRangeUp}
+          onPointerCancel={() => setRange(null)}
+        >
           <div className="reading">
             {segments
               ? segments.map((seg, i) => (
@@ -650,6 +714,7 @@ export default function App() {
                 <MouseIcon part="wheel" /> 候補{SEP}
                 <MouseIcon part="left" drag /> 文節の区切りを移動{SEP}
                 <MouseIcon part="right" /> ピン追加・削除{SEP}
+                <MouseIcon part="right" drag /> 1文節にまとめる{SEP}
                 Ctrl+
                 <MouseIcon part="wheel" /> スクロール
               </>
