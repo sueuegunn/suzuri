@@ -30,6 +30,8 @@ const WHEEL_STEP = 50;
 const WHEEL_IDLE_MS = 300;
 /** 行単位のホイールで Ctrl+スクロールするときの1行の高さ */
 const WHEEL_LINE_PX = 40;
+/** ピンの上で右ボタンを押してからこれだけ動かしたら、範囲の選択に移る */
+const PIN_DRAG_START_PX = 4;
 /** 候補一覧に並べる数 */
 const CANDIDATE_LIST_SIZE = 9;
 
@@ -334,7 +336,26 @@ export default function App() {
     bodyRef.current?.setPointerCapture(e.pointerId);
   };
 
+  /**
+   * ピンの上で右ボタンを押したところ。動かさずに離したらピンを消し、
+   * 少し動かしたらピンの位置から範囲の選択に移る（押した瞬間に消すとドラッグに移れない）
+   */
+  const pinPressRef = useRef<{ index: number; gap: number; x: number; y: number } | null>(null);
+
+  const onPinRightDown = (index: number, e: React.PointerEvent) => {
+    const s = sessionRef.current;
+    if (e.button !== 2 || !s.segments) return;
+    const gap = boundariesOf(s.segments)[index];
+    pinPressRef.current = { index, gap, x: e.clientX, y: e.clientY };
+    bodyRef.current?.setPointerCapture(e.pointerId);
+  };
+
   const onRangeMove = (e: React.PointerEvent) => {
+    const press = pinPressRef.current;
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) >= PIN_DRAG_START_PX) {
+      pinPressRef.current = null;
+      setRange({ from: press.gap, to: press.gap });
+    }
     const r = rangeRef.current;
     if (!r) return;
     const g = gapFromPoint(e.clientX, e.clientY);
@@ -342,6 +363,12 @@ export default function App() {
   };
 
   const onRangeUp = (e: React.PointerEvent) => {
+    const press = pinPressRef.current;
+    if (press && e.button === 2) {
+      pinPressRef.current = null;
+      removePin(press.index);
+      return;
+    }
     const r = rangeRef.current;
     if (!r || e.button !== 2) return;
     setRange(null);
@@ -655,7 +682,10 @@ export default function App() {
           ref={bodyRef}
           onPointerMove={onRangeMove}
           onPointerUp={onRangeUp}
-          onPointerCancel={() => setRange(null)}
+          onPointerCancel={() => {
+            pinPressRef.current = null;
+            setRange(null);
+          }}
         >
           <div className="reading">
             {segments
@@ -664,11 +694,13 @@ export default function App() {
                     {i > 0 && (
                       <span
                         className={"pin" + (drag?.pin === i - 1 ? " dragging" : "")}
-                        title="ドラッグで区切りを移動、右クリックで削除"
-                        onPointerDown={(e) => e.button === 0 && e.currentTarget.setPointerCapture(e.pointerId)}
+                        title="ドラッグで区切りを移動、右クリックで削除、右ドラッグで1文節にまとめる"
+                        onPointerDown={(e) => {
+                          if (e.button === 0) e.currentTarget.setPointerCapture(e.pointerId);
+                          else onPinRightDown(i - 1, e);
+                        }}
                         onPointerMove={(e) => onPinMove(i - 1, e)}
                         onPointerUp={() => onPinUp(i - 1)}
-                        onContextMenu={() => removePin(i - 1)}
                       />
                     )}
                     <span className={segClass(i)} {...segHandlers(i)}>
