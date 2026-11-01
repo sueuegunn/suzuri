@@ -26,6 +26,8 @@ pub struct AppState {
     pub saver: history_store::Saver,
     /// ショートカットで呼び出す前に前面にあったウィンドウ（貼り付けの戻り先）
     pub caller: Mutex<Option<platform::Caller>>,
+    /// ショートカットで呼び出したとき、呼び出し元の IME が日本語入力だったか。オーバーレイの入力モードの初期値
+    pub ime_japanese: Mutex<Option<bool>>,
     pub settings: settings::Settings,
     /// オーバーレイを表示したときに置いた位置と大きさ
     pub placement: Mutex<Option<overlay::Placement>>,
@@ -97,6 +99,7 @@ fn main() {
                 history,
                 saver,
                 caller: Mutex::new(None),
+                ime_japanese: Mutex::new(None),
                 settings,
                 placement: Mutex::new(None),
                 shortcuts,
@@ -146,7 +149,9 @@ fn main() {
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
                         // トレイから開いたときは戻り先がないので、貼り付けはしない
-                        *app.state::<AppState>().caller.lock().unwrap() = None;
+                        let state = app.state::<AppState>();
+                        *state.caller.lock().unwrap() = None;
+                        *state.ime_japanese.lock().unwrap() = None;
                         overlay::show(app, overlay::Mode::New);
                     }
                     "reset_history" => {

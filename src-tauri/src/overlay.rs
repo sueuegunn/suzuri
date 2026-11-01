@@ -51,9 +51,20 @@ pub fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
         .get_webview_window(LABEL)
         .is_some_and(|w| w.is_visible().unwrap_or(false));
     if !visible {
-        *state.caller.lock().unwrap() = platform::caller();
+        let caller = platform::caller();
+        *state.caller.lock().unwrap() = caller;
+        *state.ime_japanese.lock().unwrap() = platform::ime_is_japanese(caller);
     }
     show(app, mode);
+}
+
+/// 画面に送る "summon" イベントの中身
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Summon {
+    mode: Mode,
+    /// 呼び出し元の IME が日本語入力だったか。分からなければ null
+    ime_japanese: Option<bool>,
 }
 
 pub fn show(app: &AppHandle, mode: Mode) {
@@ -63,7 +74,8 @@ pub fn show(app: &AppHandle, mode: Mode) {
     platform::before_show(app);
     place(app, &window);
     // 表示する前に状態を切り替えさせ、前の内容が一瞬見えないようにする
-    let _ = window.emit("summon", mode);
+    let ime_japanese = *app.state::<AppState>().ime_japanese.lock().unwrap();
+    let _ = window.emit("summon", Summon { mode, ime_japanese });
     let _ = window.show();
     let _ = window.set_focus();
 }

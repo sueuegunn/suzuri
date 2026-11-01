@@ -259,14 +259,22 @@ body {
 }
 
 /* 上の余白の中央に常に出す、動かすための掴みどころ。線を入れると引き下ろせるように見えるので、カプセルだけにする */
-.grabber {
+/* 上の中央。掴みどころの左右に入力モードの切り替えを置く。掴みどころの中心はこれまでどおり上から 26.5px */
+.top-bar {
   position: absolute;
   z-index: 3;
-  top: 21px;
+  top: 15.5px;
   left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 22px;
+}
+
+.grabber {
   width: 56px;
   height: 11px;
-  margin-left: -28px;
   border-radius: 5.5px;
   background: var(--grabber);
   cursor: move;
@@ -274,6 +282,31 @@ body {
 
 .grabber:hover {
   background: var(--muted);
+}
+
+.input-mode {
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.input-mode:hover {
+  background: var(--hover);
+}
+
+/* 今のモード。打つ前に目に入るよう塗りつぶす */
+.input-mode.active {
+  color: #ffffff;
+  background: var(--accent);
 }
 
 /* 大きさを変える掴みどころ。外の余白（8px）と縁のぼかしの内側 10px にまたがる */

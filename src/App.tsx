@@ -53,6 +53,18 @@ function saveMode(mode: Mode) {
   }
 }
 
+/** 打った文字をローマ字としてかなにするか（kana）、そのまま入れるか（alnum） */
+type InputMode = "kana" | "alnum";
+
+/** Rust の "summon" イベントの中身 */
+type Summon = {
+  mode: "new" | "previous";
+  /** 呼び出し元の OS の IME が日本語入力だったか。トレイから開いたときや読めないときは null */
+  imeJapanese: boolean | null;
+};
+
+const IS_MAC = navigator.userAgent.includes("Mac");
+
 /** 次の描画が終わるのを待つ。描画が止まっているときに待ち続けないよう、長くても 50ms で打ち切る */
 function afterPaint(): Promise<void> {
   return new Promise((resolve) => {
@@ -86,8 +98,11 @@ export default function App() {
   const wheel = useRef({ acc: 0, index: -1, at: 0 });
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<number | null>(null);
-  /** 動かす掴みどころにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
-  const [grabberHover, setGrabberHover] = useState(false);
+  /** 上の掴みどころ・入力モードの切り替えのどれにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
+  const [topHover, setTopHover] = useState<"grabber" | "input" | null>(null);
+  /** 呼び出すたびに、呼び出し元の IME に合わせて決め直す */
+  const [inputMode, setInputModeState] = useState<InputMode>("kana");
+  const inputModeRef = useRef(inputMode);
   const [mode, setMode] = useState<Mode>(loadMode);
   const modeRef = useRef(mode);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -200,6 +215,14 @@ export default function App() {
     const inserted = length(r.kana);
     const next = { ...s, kana: splice(s.kana, s.caret, 0, r.kana), caret: s.caret + inserted, pending: r.pending };
     edit(s, next, s.caret, 0, inserted);
+  };
+
+  /** 入力モードを変える。打ちかけのローマ字は、そのまま確定させてから切り替える */
+  const setInputMode = (next: InputMode) => {
+    if (inputModeRef.current === next) return;
+    typeLetter("");
+    inputModeRef.current = next;
+    setInputModeState(next);
   };
 
   const toggleMode = () => {
@@ -390,13 +413,17 @@ export default function App() {
     };
   }, []);
 
-  const handlers = useRef({ type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode });
-  handlers.current = { type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode };
+  const handlers = useRef({ type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode, setInputMode });
+  handlers.current = { type, typeLetter, backspace, commit, cancel, moveCaret, toggleMode, setInputMode };
 
   useEffect(() => {
-    const unlisten = listen<"new" | "previous">("summon", (e) => {
+    const unlisten = listen<Summon>("summon", (e) => {
       closedRef.current = false;
-      update(e.payload === "previous" ? previousRef.current : emptySession);
+      update(e.payload.mode === "previous" ? previousRef.current : emptySession);
+      // 呼び出し元で英字を打っていたら英数で始める。分からなければ、日本語を打つための道具なのでかなで始める
+      const input: InputMode = e.payload.imeJapanese === false ? "alnum" : "kana";
+      inputModeRef.current = input;
+      setInputModeState(input);
       setListFor(null);
       setDrag(null);
       setHover(null);
@@ -436,10 +463,27 @@ export default function App() {
         case "End":
           h.moveCaret((s) => length(s.kana));
           break;
+        // JIS 配列の Mac の英数・かなキーと、Windows の無変換・変換キーは、それぞれのモードにする
+        case "Eisu":
+        case "NonConvert":
+          h.setInputMode("alnum");
+          break;
+        case "KanaMode":
+        case "Convert":
+          h.setInputMode("kana");
+          break;
+        // Windows の半角/全角キーは切り替える
+        case "Hankaku":
+        case "Zenkaku":
+        case "HankakuZenkaku":
+          h.setInputMode(inputModeRef.current === "kana" ? "alnum" : "kana");
+          break;
         default:
           if (e.key.length !== 1) return;
+          // 英数モードは、打ったとおりの文字をそのまま入れる
+          if (inputModeRef.current === "alnum") h.typeLetter(e.key);
           // CapsLock の状態によらず、Shift を押しているかで英字かローマ字かを決める
-          if (e.shiftKey && /^[a-z]$/i.test(e.key))
+          else if (e.shiftKey && /^[a-z]$/i.test(e.key))
             h.typeLetter(letterCaseRef.current === "lower" ? e.key.toLowerCase() : e.key.toUpperCase());
           else h.type(e.key);
       }
@@ -532,12 +576,28 @@ export default function App() {
     <div className="frame">
       <ResizeHandles />
       {/* 上の縁の掴みどころより手前に出すため、パネルの外に置く */}
-      <div
-        className="grabber"
-        onPointerDown={onGrabberDown}
-        onPointerEnter={() => setGrabberHover(true)}
-        onPointerLeave={() => setGrabberHover(false)}
-      />
+      <div className="top-bar">
+        <InputModeButton
+          label="a"
+          title="英数"
+          active={inputMode === "alnum"}
+          onSelect={() => setInputMode("alnum")}
+          onHover={(on) => setTopHover(on ? "input" : null)}
+        />
+        <div
+          className="grabber"
+          onPointerDown={onGrabberDown}
+          onPointerEnter={() => setTopHover("grabber")}
+          onPointerLeave={() => setTopHover(null)}
+        />
+        <InputModeButton
+          label="あ"
+          title="かな"
+          active={inputMode === "kana"}
+          onSelect={() => setInputMode("kana")}
+          onHover={(on) => setTopHover(on ? "input" : null)}
+        />
+      </div>
       <div className="panel" ref={panelRef} onPointerDown={startMove}>
         <div className="area reading-area" ref={bodyRef}>
           <div className="reading">
@@ -582,10 +642,15 @@ export default function App() {
         )}
         <div className="footer">
           <div className="hint">
-            {grabberHover ? (
+            {topHover === "grabber" ? (
               <>
                 <MouseIcon part="left" drag /> ドラッグで移動{SEP}
                 <MouseIcon part="left" /> ダブルクリックで中央に戻す
+              </>
+            ) : topHover === "input" ? (
+              <>
+                <MouseIcon part="left" /> 英数・かなの切り替え{SEP}
+                {IS_MAC ? "英数キー・かなキー" : "半角/全角キー・無変換キー・変換キー"}でも切り替え
               </>
             ) : segments ? (
               <>
@@ -606,6 +671,43 @@ export default function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 掴みどころの左右に置く、入力モードの切り替え。今のモードを強調する。
+ * 押してもフォーカスを取らない（Enter や Space が押したことにならないように）
+ */
+function InputModeButton({
+  label,
+  title,
+  active,
+  onSelect,
+  onHover,
+}: {
+  label: string;
+  title: string;
+  active: boolean;
+  onSelect: () => void;
+  onHover: (on: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      className={"input-mode" + (active ? " active" : "")}
+      aria-label={title}
+      aria-pressed={active}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        onSelect();
+      }}
+      onPointerEnter={() => onHover(true)}
+      onPointerLeave={() => onHover(false)}
+    >
+      {label}
+    </button>
   );
 }
 
