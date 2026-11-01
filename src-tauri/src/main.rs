@@ -253,7 +253,6 @@ fn main() {
             commands::set_appearance,
             commands::reset_window_geometry,
             commands::center_overlay,
-            commands::set_ime_japanese,
             commands::read_clipboard,
         ])
         .run(tauri::generate_context!())

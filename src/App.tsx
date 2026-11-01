@@ -240,8 +240,7 @@ export default function App() {
     typeLetter("");
     inputModeRef.current = next;
     setInputModeState(next);
-    // 呼び出し元の OS の IME も同じモードにし、戻ったあとも続けて同じモードで打てるようにする
-    engine.setImeJapanese(next === "kana");
+    // 呼び出し元の OS の IME は変えない。閉じたときだけ変えると、いつ変わるのか分かりにくいため
   };
 
   const toggleMode = () => {

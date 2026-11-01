@@ -194,15 +194,6 @@ pub fn read_clipboard(app: AppHandle) -> String {
     app.clipboard().read_text().unwrap_or_default()
 }
 
-/// 呼び出し元の OS の IME を、日本語入力か英字入力にする（オーバーレイで英数・かなを切り替えたとき）
-#[tauri::command]
-pub fn set_ime_japanese(state: State<'_, AppState>, japanese: bool) {
-    let caller = *state.caller.lock().unwrap();
-    if let Some(caller) = caller {
-        platform::set_ime_japanese(caller, japanese);
-    }
-}
-
 /// オーバーレイを今いるモニターの中央に戻す（掴みどころのダブルクリック）
 #[tauri::command]
 pub fn center_overlay(app: AppHandle) {
