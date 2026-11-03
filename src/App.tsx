@@ -678,6 +678,8 @@ export default function App() {
       setHover(null);
       window.focus();
     });
+    // macOS の英数・かなキーは入力メソッドが先に取ってしまうので、Rust 側で受け取ってイベントで届く
+    const unlistenLang = listen<InputMode>("lang-key", (e) => handlers.current.setInputMode(e.payload));
     const onKey = (e: KeyboardEvent) => {
       // 英数・かなのキー。名前が付かず、物理的な位置（Lang2・Lang1）でしか見分けられないことがある
       const lang = langMode(e);
@@ -806,6 +808,7 @@ export default function App() {
     window.addEventListener("paste", onPaste);
     return () => {
       unlisten.then((f) => f());
+      unlistenLang.then((f) => f());
       panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);

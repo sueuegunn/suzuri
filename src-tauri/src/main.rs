@@ -90,6 +90,9 @@ fn main() {
         )
         .setup(|app| {
             platform::setup(app);
+            if let Some(overlay) = app.get_webview_window(overlay::LABEL) {
+                platform::forward_lang_keys(&overlay);
+            }
 
             let dict_path = app.path().resolve("suzuri.dict", BaseDirectory::Resource)?;
             let dict = Dictionary::open(&dict_path).map_err(|e| {

@@ -11,7 +11,7 @@ use tauri_plugin_global_shortcut::{Shortcut, ShortcutEvent, ShortcutState};
 use crate::settings::{StartInputMode, WindowSize};
 use crate::{AppState, platform};
 
-const LABEL: &str = "overlay";
+pub const LABEL: &str = "overlay";
 /// 手で大きさを変えていないときの大きさ（論理ピクセル）。
 /// 見えるパネルは 900×560 で、まわりに大きさを変える掴みどころ用の透明な余白が 8px ずつある
 const DEFAULT_SIZE: LogicalSize<f64> = LogicalSize::new(916.0, 576.0);

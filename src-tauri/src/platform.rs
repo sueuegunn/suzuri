@@ -1,7 +1,7 @@
 //! OS ごとに違う処理。OS で分岐するコードはここにまとめる。
 
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-use tauri::{App, AppHandle};
+use tauri::{App, AppHandle, WebviewWindow};
 
 /// 起動時の設定。macOS では Dock にアイコンを出さず、メニューバーだけに置く
 pub fn setup(app: &mut App) {
@@ -176,6 +176,64 @@ fn classify_input_source(id: &str) -> Option<bool> {
         Some(true)
     } else {
         None
+    }
+}
+
+/// 英数・かなのキーを、OS の入力メソッドより先に受け取ってオーバーレイに "lang-key" イベント（"alnum" か "kana"）で渡す。
+/// macOS の WebView では入力メソッドがこれらのキーを先に取って入力ソースを切り替えてしまい、JS の keydown に届かないため。
+/// Windows は keydown で届くので、フロントエンドで見分ける
+pub fn forward_lang_keys(overlay: &WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    macos_keys::forward(overlay);
+    #[cfg(not(target_os = "macos"))]
+    let _ = overlay;
+}
+
+#[cfg(target_os = "macos")]
+mod macos_keys {
+    use std::ptr::{self, NonNull};
+
+    use block2::RcBlock;
+    use objc2::MainThreadMarker;
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+    use tauri::{Emitter, WebviewWindow};
+
+    /// kVK_JIS_Eisu・kVK_JIS_Kana
+    const KEY_EISU: u16 = 0x66;
+    const KEY_KANA: u16 = 0x68;
+
+    /// アプリ内のキー入力を、ウィンドウや入力メソッドに渡る前に見るモニタを置く。
+    /// オーバーレイに来た英数・かなキーだけを止め、ほかのキーやほかのウィンドウ（設定など）はそのまま通す。
+    /// 止めたキーは入力メソッドに届かないので、OS の入力ソースは変わらない（呼び出し元の IME と同期しない設計に合う）
+    pub fn forward(overlay: &WebviewWindow) {
+        let Ok(ns_window) = overlay.ns_window() else {
+            return;
+        };
+        let target = ns_window as usize;
+        let overlay = overlay.clone();
+        let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+            // SAFETY: AppKit が渡すイベントは、ハンドラを抜けるまで有効
+            let e = unsafe { event.as_ref() };
+            let mode = match e.keyCode() {
+                KEY_EISU => "alnum",
+                KEY_KANA => "kana",
+                _ => return event.as_ptr(),
+            };
+            // ローカルモニタはメインスレッドで呼ばれる
+            let Some(mtm) = MainThreadMarker::new() else {
+                return event.as_ptr();
+            };
+            if !e.window(mtm).is_some_and(|w| Retained::as_ptr(&w) as usize == target) {
+                return event.as_ptr();
+            }
+            let _ = overlay.emit("lang-key", mode);
+            ptr::null_mut()
+        });
+        // SAFETY: ハンドラは受け取ったイベントか null だけを返す
+        let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler) };
+        // アプリが終わるまで外さない
+        std::mem::forget(monitor);
     }
 }
 
