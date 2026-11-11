@@ -8,6 +8,7 @@ use std::time::Instant;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::DEFAULT_CAPACITY;
 use suzuri_engine::user_dict::MAX_READING_CHARS;
+use suzuri_engine::context::{ContextHistory, ContextKind, DEFAULT_CAPACITY as CONTEXT_CAPACITY};
 use suzuri_engine::learned::{DEFAULT_CAPACITY as LEARNED_CAPACITY, LearnedWords};
 use suzuri_engine::{CommitSegment, Committed, Engine, UserData, UserHistory, UserPos};
 
@@ -104,6 +105,24 @@ fn main() {
         println!("区切りの学習 {s}: {} → {}", first(&empty), first(&learned));
     }
 
+    // 文脈つきの学習の効き方。「人体の」のあとで「器官」、「ロケットが」のあとで「帰還」を選んだあと
+    let seg = |reading: &str, surface: &str, was_first: bool| CommitSegment {
+        reading: reading.into(),
+        surface: surface.into(),
+        was_first,
+        manual: false,
+    };
+    let mut context = UserData::default();
+    engine.commit(&mut context, &[seg("じんたいの", "人体の", true), seg("きかん", "器官", false)]);
+    engine.commit(&mut context, &[seg("ろけっとが", "ロケットが", true), seg("きかん", "帰還", false)]);
+    for s in ["じんたいのきかん", "ろけっとがきかんする", "じんたいのしくみとそのきかん", "きかん"] {
+        let first = |u: &UserData| {
+            let c = engine.convert(s, u);
+            c.segments.iter().map(|seg| seg.candidates[0].clone()).collect::<Vec<_>>().join("|")
+        };
+        println!("文脈つきの学習 {s}: {} → {}", first(&empty), first(&context));
+    }
+
     // 学習が上限まで溜まり、ユーザー辞書にも多く登録した状態。
     // 読みを上限の長さにした語を入れ、ラティスで引く長さが一番長くなるようにする
     let mut full = UserData {
@@ -122,6 +141,17 @@ fn main() {
         let reading: String = (0..MAX_READING_CHARS).map(|j| kana[(i * 7 + j * 13) % kana.len()]).collect();
         full.dictionary.add(&reading, &format!("語{i}"), UserPos::Noun).unwrap();
     }
+    full.context = ContextHistory::new(CONTEXT_CAPACITY);
+    for i in 0..CONTEXT_CAPACITY {
+        let kind = if i % 2 == 0 { ContextKind::Adjacent } else { ContextKind::Topic };
+        full.context.record(kind, &format!("語{}", i % 500), &format!("よみ{i}"), &format!("表記{i}"), false);
+    }
+    // 実際の文で文脈が当たるようにも入れる
+    for s in SENTENCES {
+        for seg in engine.convert(s, &empty).segments {
+            full.context.record(ContextKind::Topic, "今日", &seg.reading, &seg.candidates[1.min(seg.candidates.len() - 1)], false);
+        }
+    }
     full.learned = LearnedWords::new(LEARNED_CAPACITY);
     for i in 0..LEARNED_CAPACITY {
         let reading: String = (0..MAX_READING_CHARS).map(|j| kana[(i * 11 + j * 5) % kana.len()]).collect();
@@ -131,9 +161,10 @@ fn main() {
         let t = Instant::now();
         engine.convert(s, &full);
         println!(
-            "学習 {} 件・区切りの学習 {} 件・ユーザー辞書 {} 語での変換（{}文字）: {:?}",
+            "学習 {} 件・区切りの学習 {} 件・文脈 {} 件・ユーザー辞書 {} 語での変換（{}文字）: {:?}",
             full.history.len(),
             full.learned.len(),
+            full.context.len(),
             full.dictionary.words().len(),
             s.chars().count(),
             t.elapsed()
@@ -145,4 +176,7 @@ fn main() {
     let t = Instant::now();
     let text = full.learned.serialize();
     println!("区切りの学習の書き出し: {:?}（{} KB）", t.elapsed(), text.len() / 1024);
+    let t = Instant::now();
+    let text = full.context.serialize();
+    println!("文脈つきの学習の書き出し: {:?}（{} KB）", t.elapsed(), text.len() / 1024);
 }

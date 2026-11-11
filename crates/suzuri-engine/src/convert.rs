@@ -5,12 +5,13 @@
 //! 3. 隣り合う単語の品詞から文節境界を判定する（Mozc の segmenter.def を辞書に焼き込んだもの）
 //! 4. 文節ごとに、前後の文脈を固定してその範囲だけの上位候補を求める
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use crate::UserData;
+use crate::context::ContextKind;
 use crate::dict::Dictionary;
-use crate::history::{Committed, UserHistory};
+use crate::history::Committed;
 use crate::kana::{ascii_variants, hiragana_to_katakana, symbol_variants};
 
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
@@ -196,10 +197,14 @@ impl Engine {
         let mut edges = vec![0];
         edges.extend(cuts);
         edges.push(n);
-        let segments = edges
-            .windows(2)
-            .map(|w| self.segment(&lat, &path, w[0]..w[1], &user.history))
-            .collect();
+        // 左から順に作り、前の文節の第1候補の自立語を文脈として渡す
+        let mut before: Vec<String> = Vec::new();
+        let mut segments = Vec::with_capacity(edges.len() - 1);
+        for w in edges.windows(2) {
+            let (segment, content) = self.segment(&lat, &path, w[0]..w[1], user, &before);
+            before.push(content);
+            segments.push(segment);
+        }
         Conversion { segments }
     }
 
@@ -368,8 +373,17 @@ impl Engine {
         path
     }
 
-    /// 前後の単語を文脈として固定し、`range` の中だけで上位の候補を求める
-    fn segment(&self, lat: &Lattice, path: &[usize], range: Range<usize>, history: &UserHistory) -> Segment {
+    /// 前後の単語を文脈として固定し、`range` の中だけで上位の候補を求める。
+    /// `before` は前の文節の第1候補の自立語（古い順）で、文脈つきの学習に使う。
+    /// 文節と、その第1候補の自立語を返す
+    fn segment(
+        &self,
+        lat: &Lattice,
+        path: &[usize],
+        range: Range<usize>,
+        user: &UserData,
+        before: &[String],
+    ) -> (Segment, String) {
         let left = path
             .iter()
             .map(|&i| &lat.nodes[i])
@@ -380,20 +394,34 @@ impl Engine {
             .map(|&i| &lat.nodes[i])
             .find(|node| node.start == range.end)
             .map_or(BOS_EOS, |node| node.lid);
-        let best: String = path
+        let mut best = String::new();
+        let mut best_content_end = 0;
+        for node in path
             .iter()
             .map(|&i| &lat.nodes[i])
             .filter(|node| range.start <= node.start && node.end <= range.end)
-            .map(|node| self.surface(lat, node))
-            .collect();
+        {
+            best.push_str(&self.surface(lat, node));
+            if !self.dict.is_functional(node.lid) {
+                best_content_end = best.len();
+            }
+        }
 
+        // 候補の表記 → 末尾の付属語を除いた部分の長さ
+        let mut content_ends: HashMap<String, usize> = HashMap::new();
+        content_ends.insert(best.clone(), best_content_end);
         let mut finals: Vec<(i32, String)> = self
             .beam(lat, range.clone(), left)
             .into_iter()
-            .map(|x| (x.cost + self.dict.connection_cost(x.rid, right), x.surface))
+            .map(|x| {
+                content_ends.entry(x.surface.clone()).or_insert(x.content_end);
+                (x.cost + self.dict.connection_cost(x.rid, right), x.surface)
+            })
             .collect();
         finals.sort();
 
+        // 最良の並びの末尾の付属語。並びの分からない候補の自立語を求めるのに使う
+        let tail = best[best_content_end..].to_owned();
         let reading = lat.slice(range.clone()).to_owned();
         // 英字は辞書で変換せず、書き分けだけを候補にする
         let mut variants = ascii_variants(&best);
@@ -413,18 +441,26 @@ impl Engine {
                 candidates.push(s);
             }
         }
-        history.rank(&reading, &mut candidates);
+        // 学習は、文脈なし → 前に出た自立語 → 直前の自立語の順に先頭へ移し、細かい文脈ほど前に来るようにする
+        user.history.rank(&reading, &mut candidates);
+        let (adjacent, topics) = match before.split_last() {
+            Some((last, rest)) => (Some(last.as_str()), rest),
+            None => (None, &[][..]),
+        };
+        user.context.rank(&reading, adjacent, topics, &mut candidates);
         for s in [reading.clone(), hiragana_to_katakana(&reading)] {
             if !candidates.contains(&s) {
                 candidates.push(s);
             }
         }
-        Segment {
+        let content = content_of(&candidates[0], &content_ends, &tail);
+        let segment = Segment {
             start: range.start,
             end: range.end,
             reading,
             candidates,
-        }
+        };
+        (segment, content)
     }
 
     /// `range` の中の単語の並びを、左の文脈 `left` から始めて上位だけ求める。コストは右の文脈とのつながりを含まない
@@ -486,7 +522,7 @@ impl Engine {
             })
     }
 
-    /// 確定した文節を学習する。選んだ候補を覚え、手で区切った文節を語として覚える
+    /// 確定した文節を学習する。選んだ候補を覚え（文脈なしと文脈つき）、手で区切った文節を語として覚える
     pub fn commit(&self, user: &mut UserData, segments: &[CommitSegment]) {
         let committed: Vec<Committed> = segments
             .iter()
@@ -497,11 +533,34 @@ impl Engine {
             })
             .collect();
         user.history.commit(&committed);
-        for s in segments {
+
+        let analyses: Vec<Option<Analysis>> = segments
+            .iter()
+            .map(|s| self.analyze(&s.reading, &s.surface, user))
+            .collect();
+
+        // 文脈つきの学習。第1候補以外を選んだときだけ新しく覚え、第1候補のままなら覚えているものの時刻だけを更新する
+        let contents: Vec<&str> = segments
+            .iter()
+            .zip(&analyses)
+            .map(|(s, a)| a.as_ref().map_or(s.surface.as_str(), |a| a.content.as_str()))
+            .collect();
+        for (i, s) in segments.iter().enumerate().skip(1) {
+            let touch_only = s.was_first;
+            user.context
+                .record(ContextKind::Adjacent, contents[i - 1], &s.reading, &s.surface, touch_only);
+            let mut seen = HashSet::new();
+            for &c in contents[..i - 1].iter().filter(|c| seen.insert(**c)) {
+                user.context.record(ContextKind::Topic, c, &s.reading, &s.surface, touch_only);
+            }
+        }
+
+        // 区切りの学習
+        for (s, a) in segments.iter().zip(&analyses) {
             if !s.manual || s.reading.chars().count() < MIN_LEARNED_CHARS {
                 continue;
             }
-            let (lid, rid, cost) = match self.analyze(&s.reading, &s.surface, user) {
+            let (lid, rid, cost) = match a {
                 Some(a) => (a.lid, a.rid, a.cost - LEARNED_BONUS),
                 // カタカナやひらがなのままなど、辞書の単語の並びで作れない表記は名詞として覚える
                 None => {
@@ -511,6 +570,18 @@ impl Engine {
             };
             user.learned.learn(&s.reading, &s.surface, lid, rid, cost);
         }
+    }
+}
+
+/// 候補の自立語（末尾の付属語を除いた表記）。候補を作った単語の並びが分かればそれで分け、
+/// 分からない候補（学習で足したものなど）は、最良の並びの付属語と同じ末尾なら除く
+fn content_of(candidate: &str, content_ends: &HashMap<String, usize>, tail: &str) -> String {
+    if let Some(&end) = content_ends.get(candidate) {
+        return candidate[..end].to_owned();
+    }
+    match candidate.strip_suffix(tail) {
+        Some(head) if !tail.is_empty() => head.to_owned(),
+        _ => candidate.to_owned(),
     }
 }
 
@@ -532,7 +603,6 @@ struct Analysis {
     /// 単語のコストと内側のつながりのコストの合計（前後とのつながりは含まない）
     cost: i32,
     /// 末尾の付属語を除いた表記
-    #[allow(dead_code)]
     content: String,
 }
 
@@ -710,6 +780,26 @@ mod tests {
         auto.manual = false;
         e.commit(&mut user, &[auto, manual("は", "歯")]);
         assert!(user.learned.is_empty());
+    }
+
+    #[test]
+    fn context_beats_plain_learning() {
+        let e = engine();
+        let mut user = UserData::default();
+        let seg = |reading: &str, surface: &str, was_first: bool| CommitSegment {
+            reading: reading.into(),
+            surface: surface.into(),
+            was_first,
+            manual: false,
+        };
+        // 「私は」のあとで「箸」を選び、そのあと別の文脈で「橋」を選ぶ
+        e.commit(&mut user, &[seg("わたしは", "私は", true), seg("はし", "箸", false)]);
+        e.commit(&mut user, &[seg("わたる", "渡る", true), seg("はし", "橋", false)]);
+        // 文脈なしでは最後に選んだ「橋」
+        assert_eq!(e.convert_with_boundaries("はし", &[], &user).segments[0].candidates[0], "橋");
+        // 「私は」のあと（自立語「私」）では「箸」
+        let c = e.convert_with_boundaries("わたしははし", &[4], &user);
+        assert_eq!(view(&c), [(0, 4, "私は"), (4, 6, "箸")]);
     }
 
     #[test]

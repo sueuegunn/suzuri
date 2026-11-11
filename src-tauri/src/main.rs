@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
+use suzuri_engine::context::ContextHistory;
 use suzuri_engine::learned::LearnedWords;
 use suzuri_engine::{Engine, UserData};
 use settings::{StartInputMode, Theme};
@@ -107,6 +108,7 @@ fn main() {
             let paths = user_store::Paths {
                 history: data_dir.join("history.tsv"),
                 learned: data_dir.join("learned_words.tsv"),
+                context: data_dir.join("context_history.tsv"),
                 dictionary: data_dir.join("user_dictionary.tsv"),
             };
             let user = Arc::new(Mutex::new(user_store::load(&paths)));
@@ -194,6 +196,7 @@ fn main() {
                             let mut user = state.user.lock().unwrap();
                             user.history = UserHistory::default();
                             user.learned = LearnedWords::default();
+                            user.context = ContextHistory::default();
                         }
                         state.saver.request_history();
                     }

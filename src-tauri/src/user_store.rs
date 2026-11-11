@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use suzuri_engine::history::{DEFAULT_CAPACITY, UserHistory};
+use suzuri_engine::context::{self, ContextHistory};
 use suzuri_engine::learned::{self, LearnedWords};
 use suzuri_engine::{UserData, UserDictionary};
 
@@ -15,6 +16,8 @@ pub struct Paths {
     pub history: PathBuf,
     /// 区切りの学習。学習データと一緒に保存し、一緒にリセットする
     pub learned: PathBuf,
+    /// 文脈つきの学習。学習データと一緒に保存し、一緒にリセットする
+    pub context: PathBuf,
     pub dictionary: PathBuf,
 }
 
@@ -45,10 +48,18 @@ pub fn load(paths: &Paths) -> UserData {
         }),
         Err(_) => LearnedWords::default(),
     };
+    let context = match fs::read_to_string(&paths.context) {
+        Ok(text) => ContextHistory::deserialize(&text, context::DEFAULT_CAPACITY).unwrap_or_else(|e| {
+            eprintln!("{e}。文脈つきの学習を空にして始めます");
+            ContextHistory::default()
+        }),
+        Err(_) => ContextHistory::default(),
+    };
     UserData {
         history,
         dictionary,
         learned,
+        context,
     }
 }
 
@@ -61,7 +72,7 @@ enum Target {
 pub struct Saver(Sender<Target>);
 
 impl Saver {
-    /// 学習データ（選んだ候補と区切りの学習）の保存を頼む。すぐに戻る
+    /// 学習データ（選んだ候補・区切りの学習・文脈つきの学習）の保存を頼む。すぐに戻る
     pub fn request_history(&self) {
         let _ = self.0.send(Target::History);
     }
@@ -85,15 +96,18 @@ pub fn spawn(paths: Paths, user: Arc<Mutex<UserData>>) -> Saver {
                 }
             }
             if history {
-                let (text, learned) = {
+                let (text, learned, context) = {
                     let user = user.lock().unwrap();
-                    (user.history.serialize(), user.learned.serialize())
+                    (user.history.serialize(), user.learned.serialize(), user.context.serialize())
                 };
                 if let Err(e) = save(&paths.history, &text) {
                     eprintln!("学習データを保存できません: {e}");
                 }
                 if let Err(e) = save(&paths.learned, &learned) {
                     eprintln!("区切りの学習を保存できません: {e}");
+                }
+                if let Err(e) = save(&paths.context, &context) {
+                    eprintln!("文脈つきの学習を保存できません: {e}");
                 }
             }
             if dictionary {

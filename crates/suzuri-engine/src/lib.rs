@@ -2,6 +2,7 @@
 //!
 //! Tauri には依存させず、UI なしでテストとベンチマークを回せるようにしている。
 
+pub mod context;
 mod convert;
 pub mod dict;
 pub mod history;
@@ -22,4 +23,6 @@ pub struct UserData {
     pub dictionary: UserDictionary,
     /// 手で区切った文節（区切りの学習）
     pub learned: learned::LearnedWords,
+    /// 前に出た自立語ごとに選んだ候補（文脈つきの学習）
+    pub context: context::ContextHistory,
 }
