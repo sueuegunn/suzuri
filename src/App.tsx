@@ -1064,12 +1064,14 @@ function InputModeButton({
 }
 
 /**
- * el が area の見える範囲から上下にはみ出していたら、area を最小限スクロールして入れる。
- * scrollIntoView はパネルなど外側の要素までスクロールさせるので使わない
+ * el の最後の行が area の見える範囲から上下にはみ出していたら、area を最小限スクロールして入れる。
+ * 何行にもまたがる文節の全体を見ると、上端に合わせて先頭まで戻ってしまう（打つたびに上へ飛んで戻る）ので、
+ * 打っている場所である最後の行だけを見る。scrollIntoView はパネルなど外側の要素までスクロールさせるので使わない
  */
 function keepInView(area: HTMLElement, el: HTMLElement) {
   const a = area.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
+  const rects = el.getClientRects();
+  const r = rects.length > 0 ? rects[rects.length - 1] : el.getBoundingClientRect();
   if (r.bottom > a.bottom) area.scrollTop += r.bottom - a.bottom;
   else if (r.top < a.top) area.scrollTop -= a.top - r.top;
 }
