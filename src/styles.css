@@ -634,7 +634,6 @@ body.settings-body {
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
-  gap: 6px;
   max-width: calc(100% - 24px);
   padding: 4px 12px;
   font-size: 13px;
@@ -648,7 +647,13 @@ body.settings-body {
   cursor: pointer;
 }
 
-.notice span {
+/* 語の前後は省略せず、収まらないときは語の末尾だけを省略する */
+.notice-fixed {
+  flex: none;
+}
+
+.notice-word {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -658,6 +663,7 @@ body.settings-body {
   flex: none;
   width: 14px;
   height: 14px;
+  margin-right: 6px;
   transform: rotate(-90deg);
 }
 

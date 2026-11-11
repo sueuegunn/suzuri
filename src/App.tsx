@@ -37,7 +37,9 @@ const PIN_DRAG_START_PX = 4;
 const PIN_CLICK_MS = 300;
 /** 下段の文節をユーザー辞書に登録したときの知らせを出しておく時間。その間は左クリックで取り消せる */
 const NOTICE_MS = 5000;
-const REGISTERED_NOTICE = "ユーザ辞書に登録しました。左クリックでキャンセルできます。";
+/** 登録したときの知らせの、語の前と後ろ。語が長くて1行に収まらないときは、語の末尾だけを省略する */
+const REGISTERED_BEFORE = "ユーザ辞書に「";
+const REGISTERED_AFTER = "」を登録しました。左クリックでキャンセルできます。";
 
 /** 区切り線の上に1行だけ出す知らせ。word があれば、左クリックでその登録を取り消す */
 type Notice = { id: number; text: string; word: UserWord | null };
@@ -941,7 +943,8 @@ export default function App() {
     const reading = picked.map((s) => s.reading).join("");
     const surface = picked.map((s) => s.candidates[s.selected]).join("");
     try {
-      showNotice(REGISTERED_NOTICE, await userDictionary.registerSegment(reading, surface));
+      const word = await userDictionary.registerSegment(reading, surface);
+      showNotice(`${REGISTERED_BEFORE}${word.surface}${REGISTERED_AFTER}`, word);
     } catch (e) {
       showNotice(String(e), null);
     }
@@ -1065,7 +1068,15 @@ export default function App() {
                 <circle className="notice-timer-track" cx="10" cy="10" r="9" />
                 <circle className="notice-timer-pie" cx="10" cy="10" r="4.5" />
               </svg>
-              <span>{notice.text}</span>
+              {notice.word ? (
+                <>
+                  <span className="notice-fixed">{REGISTERED_BEFORE}</span>
+                  <span className="notice-word">{notice.word.surface}</span>
+                  <span className="notice-fixed">{REGISTERED_AFTER}</span>
+                </>
+              ) : (
+                <span className="notice-word">{notice.text}</span>
+              )}
             </div>
           </div>
         )}
