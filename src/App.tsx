@@ -128,6 +128,7 @@ export default function App() {
   const bodyRef = useRef<HTMLDivElement>(null);
   /** 下段の各文節の要素。候補一覧の位置合わせに使う */
   const resultRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const resultAreaRef = useRef<HTMLDivElement>(null);
 
   const update = (s: Session) => {
     sessionRef.current = s;
@@ -648,6 +649,25 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
+  // 打ったり入力カーソルを動かしたりしたら、上段は入力カーソルを、下段はそれがある文節を見える範囲に入れる。
+  // 長い文で下段があふれると、最後の行（行末で折り返した句読点だけのことがある）が隠れたままになるため。
+  // 変換結果は打鍵より後に届くので、文節が変わったときにも合わせ直す
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const caret = body?.querySelector<HTMLElement>(".caret");
+    if (body && caret) keepInView(body, caret);
+    const segs = session.segments;
+    const area = resultAreaRef.current;
+    if (!segs || segs.length === 0 || !area) return;
+    // 入力カーソルの直前の文字を含む文節。先頭にあるときは最初の文節、
+    // 打った文字の変換結果がまだ届かず文節より後ろにあるときは最後の文節
+    const found = segs.findIndex((seg) => seg.start < session.caret && session.caret <= seg.end);
+    const i = found >= 0 ? found : session.caret === 0 ? 0 : segs.length - 1;
+    const el = resultRefs.current[i];
+    if (el) keepInView(area, el);
+    // 候補をホイールで替えただけでは動かさない（スクロールして選んでいる文節から引き戻さない）
+  }, [session.kana, session.caret, session.pending, session.segments?.map((seg) => seg.end).join()]);
+
   // 見た目は起動時に読んでおき、設定画面で変えたらイベントで受け取る
   useEffect(() => {
     settings.getAppearance().then(applyAppearance);
@@ -954,7 +974,7 @@ export default function App() {
           </div>
           {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
         </div>
-        <div className="area result-area">
+        <div className="area result-area" ref={resultAreaRef}>
           {segments?.map((seg, i) => (
             <span
               key={`${seg.start}:${seg.end}`}
@@ -1041,6 +1061,17 @@ function InputModeButton({
       {label}
     </button>
   );
+}
+
+/**
+ * el が area の見える範囲から上下にはみ出していたら、area を最小限スクロールして入れる。
+ * scrollIntoView はパネルなど外側の要素までスクロールさせるので使わない
+ */
+function keepInView(area: HTMLElement, el: HTMLElement) {
+  const a = area.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  if (r.bottom > a.bottom) area.scrollTop += r.bottom - a.bottom;
+  else if (r.top < a.top) area.scrollTop -= a.top - r.top;
 }
 
 /**
