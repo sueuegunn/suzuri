@@ -211,7 +211,11 @@ export default function App() {
     const pinned = shiftBoundaries(old.pinned, pos, removed, inserted, n);
     next = { ...next, pinned };
     update(next);
-    const [start, end] = retypeRange(boundaries, pinned, pos, pos + inserted, n);
+    // 候補を選んだ文節は区切り直さず、選んだ候補を保つ
+    const fixed = old.segments
+      .filter((seg) => seg.selected !== 0)
+      .flatMap((seg) => [seg.start, seg.end].map((x) => shiftPosition(x, pos, removed, inserted)));
+    const [start, end] = retypeRange(boundaries, pinned, pos, pos + inserted, n, fixed);
     run(next.kana, old.segments, engine.resegment(next.kana, boundaries, start, end), (x) =>
       shiftPosition(x, pos, removed, inserted),
     );

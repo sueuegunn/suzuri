@@ -27,10 +27,16 @@ describe("retypeRange", () => {
   it("also covers the previous segment", () => {
     // 「くるま|で」の末尾に打ったときは「くるまで…」をまとめて区切り直す
     expect(retypeRange([3], [], 4, 5, 5)).toEqual([0, 5]);
-    expect(retypeRange([4, 9], [], 10, 11, 11)).toEqual([4, 11]);
+    expect(retypeRange([20, 30], [], 31, 32, 32)).toEqual([20, 32]);
   });
-  it("does not cross a pinned boundary", () => {
+  it("covers segments starting within the window", () => {
+    // 「アニメ|ー|しょ」の末尾に「ん」を打ったときは、先頭からまとめて区切り直す
+    expect(retypeRange([3, 4], [], 6, 7, 7)).toEqual([0, 7]);
+    expect(retypeRange([5, 22, 25, 27], [], 30, 31, 31)).toEqual([22, 31]);
+  });
+  it("does not cross a pinned boundary or a chosen segment", () => {
     expect(retypeRange([4, 9], [9], 10, 11, 11)).toEqual([9, 11]);
+    expect(retypeRange([3, 4], [], 6, 7, 7, [3, 4])).toEqual([4, 7]);
   });
 });
 

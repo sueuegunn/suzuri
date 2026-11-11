@@ -68,10 +68,15 @@ export function rangeAround(boundaries: number[], from: number, to: number, n: n
   return [start, end];
 }
 
+/** 打ったときに、打った位置からこれだけ前（文字数）までに始まる文節を区切り直す */
+export const RETYPE_WINDOW = 12;
+
 /**
- * 打ったときに区切り直す範囲。直した文節に加えて、1つ前の文節も含める。
- * 打っている途中は語の切れ目が決まりきらず（「くるま」の時点で区切ると「車｜で」と割れる）、
- * 前の文節とつなぎ直せるようにするため。ただし手で置いた区切りは越えない
+ * 打ったときに区切り直す範囲。直した文節に加えて、1つ前の文節と、打った位置から
+ * RETYPE_WINDOW 文字以内に始まる文節を含める。打っている途中は語の切れ目が決まりきらず
+ * （「くるま」の時点で区切ると「車｜で」と割れる、「あにめー」で「アニメ｜ー」と割れる）、
+ * 前の文節とつなぎ直せるようにするため。それより前は、打つたびに入れ替わってちらつかないよう触らない。
+ * 手で置いた区切り（pinned）と、候補を選んだ文節の両端（fixed）は越えない
  */
 export function retypeRange(
   boundaries: number[],
@@ -79,10 +84,14 @@ export function retypeRange(
   from: number,
   to: number,
   n: number,
+  fixed: number[] = [],
 ): [number, number] {
   const [start, end] = rangeAround(boundaries, from, to, n);
-  if (start === 0 || pinned.includes(start)) return [start, end];
-  return [Math.max(0, ...boundaries.filter((b) => b < start)), end];
+  const floor = Math.max(0, ...[...pinned, ...fixed].filter((b) => b <= start));
+  const previous = Math.max(0, ...boundaries.filter((b) => b < start));
+  const near = Math.min(previous, ...boundaries.filter((b) => b >= from - RETYPE_WINDOW && b < start));
+  const reach = from - RETYPE_WINDOW <= 0 ? 0 : near;
+  return [Math.max(floor, reach), end];
 }
 
 /**
