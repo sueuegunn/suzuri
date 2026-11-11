@@ -683,6 +683,11 @@ body.settings-body {
   animation: notice-timer 5s linear forwards;
 }
 
+/* マウスが乗っている間は満ちた円のまま止める。離すと要素を作り直して欠け始めからやり直す */
+.notice.hover .notice-timer-pie {
+  animation: none;
+}
+
 @keyframes notice-timer {
   to {
     stroke-dashoffset: 28.28;

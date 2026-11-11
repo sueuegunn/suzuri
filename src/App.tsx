@@ -148,11 +148,34 @@ export default function App() {
   const noticeTimer = useRef<number | undefined>(undefined);
   const noticeId = useRef(0);
 
+  /** 知らせにマウスが乗っているか。乗っている間は残り時間を5秒に戻して止める */
+  const [noticeHover, setNoticeHover] = useState(false);
+  /** 円の印を欠け始めからやり直すたびに増やす（要素を作り直してアニメーションを最初から流す） */
+  const [noticeRun, setNoticeRun] = useState(0);
+
+  /** 今の知らせを、今から5秒後に消す */
+  const startNoticeTimer = (id: number) => {
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice((n) => (n?.id === id ? null : n)), NOTICE_MS);
+  };
+
   const showNotice = (text: string, word: UserWord | null) => {
     const id = ++noticeId.current;
     setNotice({ id, text, word });
+    setNoticeHover(false);
+    startNoticeTimer(id);
+  };
+
+  const onNoticeEnter = () => {
     window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice((n) => (n?.id === id ? null : n)), NOTICE_MS);
+    setNoticeHover(true);
+  };
+
+  const onNoticeLeave = () => {
+    if (!notice) return;
+    setNoticeHover(false);
+    setNoticeRun((r) => r + 1);
+    startNoticeTimer(notice.id);
   };
 
   const hideNotice = () => {
@@ -1063,8 +1086,15 @@ export default function App() {
         </div>
         {notice && (
           <div className="notice-anchor">
-            <div className="notice" key={notice.id} onClick={onNoticeClick} title={notice.word ? "クリックで登録を取り消す" : undefined}>
-              <svg className="notice-timer" viewBox="0 0 20 20" aria-hidden="true">
+            <div
+              className={"notice" + (noticeHover ? " hover" : "")}
+              key={notice.id}
+              onClick={onNoticeClick}
+              onMouseEnter={onNoticeEnter}
+              onMouseLeave={onNoticeLeave}
+              title={notice.word ? "クリックで登録を取り消す" : undefined}
+            >
+              <svg className="notice-timer" key={noticeRun} viewBox="0 0 20 20" aria-hidden="true">
                 <circle className="notice-timer-track" cx="10" cy="10" r="9" />
                 <circle className="notice-timer-pie" cx="10" cy="10" r="4.5" />
               </svg>
