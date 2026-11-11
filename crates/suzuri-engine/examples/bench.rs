@@ -7,7 +7,24 @@ use std::time::Instant;
 
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::DEFAULT_CAPACITY;
-use suzuri_engine::{Committed, Engine, UserHistory};
+use suzuri_engine::user_dict::MAX_READING_CHARS;
+use suzuri_engine::{Committed, Engine, UserData, UserHistory, UserPos};
+
+/// ユーザー辞書の効き方を見る文。登録した語が効くか、ほかの語の一部の読みに割り込まないか
+const USER_WORDS: &[(&str, &str, UserPos)] = &[
+    ("たなか", "田中", UserPos::Person),
+    ("すずり", "スズリ", UserPos::Organization),
+    ("かい", "KAI", UserPos::Noun),
+];
+const USER_SENTENCES: &[&str] = &[
+    "たなかさんにあう",
+    "きたなかった",
+    "すずりでへんかんする",
+    "すずりですみをする",
+    "かいぎにでる",
+    "かいをひらく",
+    "にかいめ",
+];
 
 const SENTENCES: &[&str] = &[
     "わたしはきょうがっこうにいきます",
@@ -25,7 +42,7 @@ fn main() {
     let engine = Engine::new(Dictionary::open(&path).expect("辞書を開けません"));
     println!("辞書の読み込み: {:?}", t.elapsed());
 
-    let empty = UserHistory::default();
+    let empty = UserData::default();
     for s in SENTENCES {
         let t = Instant::now();
         let c = engine.convert(s, &empty);
@@ -56,19 +73,49 @@ fn main() {
     engine.resegment_ranges(s, &merged, &[0..from, to..n], &empty);
     println!("範囲を1文節にしての再変換（{}文字）: {:?}", n, t.elapsed());
 
-    // 学習が上限まで溜まった状態
-    let mut full = UserHistory::new(DEFAULT_CAPACITY);
+    // 登録した語の効き方。登録の前と後を並べる
+    let mut words = UserData::default();
+    for &(reading, surface, pos) in USER_WORDS {
+        words.dictionary.add(reading, surface, pos).unwrap();
+    }
+    for s in USER_SENTENCES {
+        let first = |u: &UserData| {
+            let c = engine.convert(s, u);
+            c.segments.iter().map(|seg| seg.candidates[0].clone()).collect::<Vec<_>>().join("|")
+        };
+        println!("ユーザー辞書 {s}: {} → {}", first(&empty), first(&words));
+    }
+
+    // 学習が上限まで溜まり、ユーザー辞書にも多く登録した状態。
+    // 読みを上限の長さにした語を入れ、ラティスで引く長さが一番長くなるようにする
+    let mut full = UserData {
+        history: UserHistory::new(DEFAULT_CAPACITY),
+        ..Default::default()
+    };
     for i in 0..DEFAULT_CAPACITY {
-        full.commit(&[Committed {
+        full.history.commit(&[Committed {
             reading: format!("よみ{i}"),
             surface: format!("表記{i}"),
             was_first: false,
         }]);
     }
+    let kana: Vec<char> = ('あ'..='ん').collect();
+    for i in 0..1000 {
+        let reading: String = (0..MAX_READING_CHARS).map(|j| kana[(i * 7 + j * 13) % kana.len()]).collect();
+        full.dictionary.add(&reading, &format!("語{i}"), UserPos::Noun).unwrap();
+    }
+    for s in SENTENCES {
+        let t = Instant::now();
+        engine.convert(s, &full);
+        println!(
+            "学習 {} 件・ユーザー辞書 {} 語での変換（{}文字）: {:?}",
+            full.history.len(),
+            full.dictionary.words().len(),
+            s.chars().count(),
+            t.elapsed()
+        );
+    }
     let t = Instant::now();
-    engine.convert(s, &full);
-    println!("学習 {} 件での変換: {:?}", full.len(), t.elapsed());
-    let t = Instant::now();
-    let text = full.serialize();
+    let text = full.history.serialize();
     println!("学習の書き出し: {:?}（{} KB）", t.elapsed(), text.len() / 1024);
 }

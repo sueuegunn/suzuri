@@ -3,12 +3,13 @@
 //! 形式（数値はすべてリトルエンディアン）:
 //!
 //! ```text
-//! ヘッダー  magic(8) pos_count(u32) unknown_id(u32) 各セクションの (offset u32, len u32) × 5
+//! ヘッダー  magic(8) pos_count(u32) unknown_id(u32) 各セクションの (offset u32, len u32) × 6
 //! 接続コスト  i16 × pos_count²       （rid * pos_count + lid の順）
 //! 文節境界    1bit × pos_count²      （同上。1 なら rid と lid の間で文節を区切る）
 //! 読み索引    fst::Map               （読み → 開始位置 << 16 | 件数）
 //! 単語        10バイト × 単語数      （lid u16, rid u16, cost i16, 表記 u32）
 //! 表記        長さ u16 + UTF-8       （読みと同じ・カタカナ以外の表記だけを重複なく置く）
+//! ユーザー辞書の品詞  u16 × UserPos::ALL.len()  （UserPos::ALL の順の品詞ID）
 //! ```
 
 use std::borrow::Cow;
@@ -20,9 +21,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::kana::hiragana_to_katakana;
+use crate::user_dict::UserPos;
 
-const MAGIC: &[u8; 8] = b"SZRDIC01";
-const SECTION_COUNT: usize = 5;
+const MAGIC: &[u8; 8] = b"SZRDIC02";
+const SECTION_COUNT: usize = 6;
 const HEADER_SIZE: usize = 8 + 4 + 4 + SECTION_COUNT * 8;
 const ENTRY_SIZE: usize = 10;
 /// 表記が読みと同じ（ひらがなのまま）
@@ -74,10 +76,11 @@ pub struct DictionaryBuilder {
     connection: Vec<i16>,
     boundary: Vec<u8>,
     entries: Vec<RawEntry>,
+    user_pos: [u16; UserPos::ALL.len()],
 }
 
 impl DictionaryBuilder {
-    /// 接続コストはすべて 0、文節境界はすべて「区切る」で初期化する
+    /// 接続コストはすべて 0、文節境界はすべて「区切る」、ユーザー辞書の品詞はすべて未知語の品詞で初期化する
     pub fn new(pos_count: u16, unknown_id: u16) -> Self {
         let n = pos_count as usize;
         DictionaryBuilder {
@@ -86,7 +89,13 @@ impl DictionaryBuilder {
             connection: vec![0; n * n],
             boundary: vec![0xff; (n * n).div_ceil(8)],
             entries: Vec::new(),
+            user_pos: [unknown_id; UserPos::ALL.len()],
         }
+    }
+
+    /// ユーザー辞書の語に付ける品詞IDを決める
+    pub fn set_user_pos(&mut self, pos: UserPos, id: u16) {
+        self.user_pos[pos as usize] = id;
     }
 
     pub fn set_connection(&mut self, rid: u16, lid: u16, cost: i16) {
@@ -109,8 +118,8 @@ impl DictionaryBuilder {
 
     pub fn build(mut self) -> Result<Vec<u8>, DictError> {
         let n = self.pos_count;
-        if self.unknown_id as usize >= n {
-            return Err(invalid("未知語の品詞IDが範囲外です"));
+        if self.unknown_id as usize >= n || self.user_pos.iter().any(|&id| id as usize >= n) {
+            return Err(invalid("未知語かユーザー辞書の品詞IDが範囲外です"));
         }
         for e in &self.entries {
             if e.lid as usize >= n || e.rid as usize >= n {
@@ -178,8 +187,9 @@ impl DictionaryBuilder {
             .iter()
             .flat_map(|c| c.to_le_bytes())
             .collect();
+        let user_pos: Vec<u8> = self.user_pos.iter().flat_map(|id| id.to_le_bytes()).collect();
         let sections: [&[u8]; SECTION_COUNT] =
-            [&connection, &self.boundary, &index, &entry_bytes, &pool];
+            [&connection, &self.boundary, &index, &entry_bytes, &pool, &user_pos];
 
         let mut out = Vec::new();
         out.extend_from_slice(MAGIC);
@@ -264,6 +274,7 @@ pub struct Dictionary {
     index: fst::raw::Fst<Slice>,
     entries: Range<usize>,
     pool: Range<usize>,
+    user_pos: [u16; UserPos::ALL.len()],
 }
 
 impl Dictionary {
@@ -299,11 +310,21 @@ impl Dictionary {
             }
             sections.push(offset..offset + len);
         }
-        let [connection, boundary, index, entries, pool]: [Range<usize>; SECTION_COUNT] =
+        let [connection, boundary, index, entries, pool, user_pos]: [Range<usize>; SECTION_COUNT] =
             sections.try_into().unwrap();
         let cells = pos_count * pos_count;
         if connection.len() != cells * 2 || boundary.len() != cells.div_ceil(8) {
             return Err(invalid("接続表の大きさが合いません"));
+        }
+        if user_pos.len() != UserPos::ALL.len() * 2 {
+            return Err(invalid("ユーザー辞書の品詞の領域の大きさが合いません"));
+        }
+        let user_pos: [u16; UserPos::ALL.len()] = std::array::from_fn(|i| {
+            let o = user_pos.start + i * 2;
+            u16::from_le_bytes([data[o], data[o + 1]])
+        });
+        if user_pos.iter().any(|&id| id as usize >= pos_count) {
+            return Err(invalid("ユーザー辞書の品詞IDが範囲外です"));
         }
         if entries.len() % ENTRY_SIZE != 0 {
             return Err(invalid("単語の領域の大きさが合いません"));
@@ -323,6 +344,7 @@ impl Dictionary {
             index,
             entries,
             pool,
+            user_pos,
         };
         dict.validate_entries()?;
         Ok(dict)
@@ -373,6 +395,11 @@ impl Dictionary {
     /// 辞書にない文字に使う品詞ID
     pub fn unknown_id(&self) -> u16 {
         self.unknown_id
+    }
+
+    /// ユーザー辞書の語に付ける品詞ID
+    pub fn user_pos_id(&self, pos: UserPos) -> u16 {
+        self.user_pos[pos as usize]
     }
 
     /// 左の単語の右文脈IDと右の単語の左文脈IDから、つながりのコストを返す

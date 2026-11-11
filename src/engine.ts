@@ -12,6 +12,19 @@ export type Appearance = { textScale: number; opacity: number };
 
 export type Committed = { reading: string; surface: string; wasFirst: boolean };
 
+/** ユーザー辞書の品詞。名前は Rust 側の UserPos と合わせる */
+export type UserPos = "noun" | "person" | "place" | "organization";
+
+export type UserWord = { reading: string; surface: string; pos: UserPos };
+
+/** ユーザー辞書の読み書き。追加と削除は、変えたあとの一覧（登録した順）を返す */
+export const userDictionary = {
+  list: () => invoke<UserWord[]>("list_user_words"),
+  /** 読みや表記が正しくなければ、画面に出す理由で失敗する */
+  add: (word: UserWord) => invoke<UserWord[]>("add_user_word", { word }),
+  remove: (word: UserWord) => invoke<UserWord[]>("remove_user_word", { word }),
+};
+
 export const engine = {
   convert: (reading: string) => invoke<EngineSegment[]>("convert", { reading }),
   convertWithBoundaries: (reading: string, boundaries: number[]) =>

@@ -2,17 +2,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
-mod history_store;
 mod overlay;
 mod platform;
 mod settings;
 mod shortcuts;
+mod user_store;
 
 use std::sync::{Arc, Mutex};
 
-use suzuri_engine::Engine;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
+use suzuri_engine::{Engine, UserData};
 use settings::{StartInputMode, Theme};
 use tauri::{Emitter, Manager};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
@@ -22,8 +22,9 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 pub struct AppState {
     pub engine: Engine,
-    pub history: Arc<Mutex<UserHistory>>,
-    pub saver: history_store::Saver,
+    /// 学習とユーザー辞書。変換のたびにエンジンへ渡す
+    pub user: Arc<Mutex<UserData>>,
+    pub saver: user_store::Saver,
     /// ショートカットで呼び出す前に前面にあったウィンドウ（貼り付けの戻り先）
     pub caller: Mutex<Option<platform::Caller>>,
     /// ショートカットで呼び出したとき、呼び出し元の IME が日本語入力だったか。オーバーレイの入力モードの初期値
@@ -66,7 +67,7 @@ fn open_settings(app: &tauri::AppHandle) {
     }
     let built = tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App("index.html#settings".into()))
         .title("スズリの設定")
-        .inner_size(460.0, 520.0)
+        .inner_size(480.0, 600.0)
         .resizable(false)
         .center()
         .build();
@@ -102,14 +103,17 @@ fn main() {
                 )
             })?;
             let data_dir = app.path().app_data_dir()?;
-            let history_path = data_dir.join("history.tsv");
-            let history = Arc::new(Mutex::new(history_store::load(&history_path)));
-            let saver = history_store::spawn(history_path, history.clone());
+            let paths = user_store::Paths {
+                history: data_dir.join("history.tsv"),
+                dictionary: data_dir.join("user_dictionary.tsv"),
+            };
+            let user = Arc::new(Mutex::new(user_store::load(&paths)));
+            let saver = user_store::spawn(paths, user.clone());
             let settings = settings::Settings::load(data_dir.join("settings.json"));
             let shortcuts = shortcuts::Shortcuts::new(settings.get().shortcuts);
             app.manage(AppState {
                 engine: Engine::new(dict),
-                history,
+                user,
                 saver,
                 caller: Mutex::new(None),
                 ime_japanese: Mutex::new(None),
@@ -183,8 +187,9 @@ fn main() {
                     }
                     "reset_history" => {
                         let state = app.state::<AppState>();
-                        *state.history.lock().unwrap() = UserHistory::default();
-                        state.saver.request();
+                        // ユーザー辞書は学習ではないので消さない
+                        state.user.lock().unwrap().history = UserHistory::default();
+                        state.saver.request_history();
                     }
                     "autostart" => {
                         let launcher = app.autolaunch();
@@ -257,6 +262,9 @@ fn main() {
             commands::reset_window_geometry,
             commands::get_keep_pasted_in_clipboard,
             commands::set_keep_pasted_in_clipboard,
+            commands::list_user_words,
+            commands::add_user_word,
+            commands::remove_user_word,
             commands::center_overlay,
             commands::read_clipboard,
         ])

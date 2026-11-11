@@ -545,3 +545,71 @@ body.settings-body {
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* 設定画面の上のタブ（一般・ユーザー辞書） */
+.settings-tabs {
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.settings-tabs button {
+  min-width: 120px;
+}
+
+/* ユーザー辞書のタブ。一覧は残りの高さでスクロールする */
+.user-dictionary {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-word-form {
+  display: flex;
+  gap: 8px;
+}
+
+.settings input:not([type]),
+.settings select {
+  font: inherit;
+  color: var(--fg);
+  background: var(--button-bg);
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 0;
+}
+
+.user-word-form input {
+  flex: 1;
+}
+
+.user-word-list {
+  max-height: 330px;
+  overflow-y: auto;
+  border-top: 1px solid var(--divider);
+}
+
+.user-word {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.user-word span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-word-reading,
+.user-word-pos,
+.user-word-empty {
+  color: var(--muted);
+}
+
+.user-word-empty {
+  margin: 12px 0;
+  text-align: center;
+}

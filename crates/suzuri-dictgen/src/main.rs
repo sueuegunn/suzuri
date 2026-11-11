@@ -12,7 +12,16 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 use sha2::{Digest, Sha256};
+use suzuri_engine::UserPos;
 use suzuri_engine::dict::{Dictionary, DictionaryBuilder, RawEntry};
+
+/// ユーザー辞書の品詞に使う Mozc の品詞
+const USER_POS: [(UserPos, &str); 4] = [
+    (UserPos::Noun, "名詞,一般,*,*,*,*,*"),
+    (UserPos::Person, "名詞,固有名詞,人名,一般,*,*,*"),
+    (UserPos::Place, "名詞,固有名詞,地域,一般,*,*,*"),
+    (UserPos::Organization, "名詞,固有名詞,組織,*,*,*,*"),
+];
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -68,6 +77,10 @@ fn main() -> Result<()> {
         .position(|p| p == UNKNOWN_POS)
         .ok_or("未知語の品詞が id.def にありません")? as u16;
     let mut builder = DictionaryBuilder::new(pos_count, unknown_id);
+    for (user_pos, name) in USER_POS {
+        let id = pos.iter().position(|p| p == name).ok_or(format!("{name} が id.def にありません"))?;
+        builder.set_user_pos(user_pos, id as u16);
+    }
 
     apply_connection(&mut builder, &read("src/data/dictionary_oss/connection_single_column.txt")?, pos.len())?;
     let segmenter = format!("{SEGMENTER_OVERRIDES}{}", read("src/data/rules/segmenter.def")?);

@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { settings, type Appearance } from "./engine";
 import { label, record, type Bindings } from "./shortcut";
+import UserDictionarySettings from "./UserDictionarySettings";
 
 const MAC = /Mac/i.test(navigator.userAgent);
+
+type Tab = "general" | "dictionary";
+const TABS: { key: Tab; title: string }[] = [
+  { key: "general", title: "一般" },
+  { key: "dictionary", title: "ユーザー辞書" },
+];
 
 const ROWS: { kind: keyof Bindings; title: string }[] = [
   { kind: "new", title: "新しく入力する" },
@@ -18,8 +25,9 @@ const SLIDERS: { key: keyof Appearance; title: string; min: number; max: number;
 /** つまみを動かしている間は保存せず、止めてからまとめて保存する */
 const APPEARANCE_SAVE_MS = 300;
 
-/** トレイの「設定…」から開くウィンドウ。ショートカットを押して記録する */
+/** トレイの「設定…」から開くウィンドウ。「一般」と「ユーザー辞書」のタブに分ける */
 export default function Settings() {
+  const [tab, setTab] = useState<Tab>("general");
   const [bindings, setBindings] = useState<Bindings | null>(null);
   const [recording, setRecording] = useState<keyof Bindings | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
@@ -101,8 +109,8 @@ export default function Settings() {
     };
   }, [bindings]);
 
-  return (
-    <div className="settings">
+  const general = (
+    <>
       <h1>ショートカット</h1>
       {ROWS.map(({ kind, title }) => (
         <div className="settings-row" key={kind}>
@@ -163,6 +171,25 @@ export default function Settings() {
           元に戻す
         </button>
       </div>
+    </>
+  );
+
+  return (
+    <div className="settings">
+      <div className="segmented settings-tabs">
+        {TABS.map(({ key, title }) => (
+          <button
+            key={key}
+            className={tab === key ? "selected" : ""}
+            onClick={() => setTab(key)}
+            // 記録中はショートカットの登録を外しているので、記録を終えるまで切り替えない
+            disabled={recording !== null}
+          >
+            {title}
+          </button>
+        ))}
+      </div>
+      {tab === "dictionary" ? <UserDictionarySettings /> : general}
     </div>
   );
 }

@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use suzuri_engine::{Committed, Conversion};
+use suzuri_engine::{Committed, Conversion, UserPos, UserWord};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -69,8 +69,8 @@ fn to_dto(c: Conversion) -> Vec<SegmentDto> {
 
 #[tauri::command(async)]
 pub fn convert(state: State<'_, AppState>, reading: String) -> Vec<SegmentDto> {
-    let history = state.history.lock().unwrap();
-    to_dto(state.engine.convert(&reading, &history))
+    let user = state.user.lock().unwrap();
+    to_dto(state.engine.convert(&reading, &user))
 }
 
 #[tauri::command(async)]
@@ -79,8 +79,8 @@ pub fn convert_with_boundaries(
     reading: String,
     boundaries: Vec<usize>,
 ) -> Vec<SegmentDto> {
-    let history = state.history.lock().unwrap();
-    to_dto(state.engine.convert_with_boundaries(&reading, &boundaries, &history))
+    let user = state.user.lock().unwrap();
+    to_dto(state.engine.convert_with_boundaries(&reading, &boundaries, &user))
 }
 
 #[tauri::command(async)]
@@ -91,8 +91,8 @@ pub fn resegment(
     start: usize,
     end: usize,
 ) -> Vec<SegmentDto> {
-    let history = state.history.lock().unwrap();
-    to_dto(state.engine.resegment(&reading, &boundaries, start..end, &history))
+    let user = state.user.lock().unwrap();
+    to_dto(state.engine.resegment(&reading, &boundaries, start..end, &user))
 }
 
 /// `ranges` のそれぞれの内側だけ自動で区切り直す（右ドラッグで選んだ範囲を1文節にしたとき）
@@ -103,9 +103,9 @@ pub fn resegment_ranges(
     boundaries: Vec<usize>,
     ranges: Vec<(usize, usize)>,
 ) -> Vec<SegmentDto> {
-    let history = state.history.lock().unwrap();
+    let user = state.user.lock().unwrap();
     let ranges: Vec<_> = ranges.into_iter().map(|(start, end)| start..end).collect();
-    to_dto(state.engine.resegment_ranges(&reading, &boundaries, &ranges, &history))
+    to_dto(state.engine.resegment_ranges(&reading, &boundaries, &ranges, &user))
 }
 
 #[derive(Deserialize)]
@@ -177,10 +177,70 @@ pub fn commit(
                 was_first: s.was_first,
             })
             .collect();
-        state.history.lock().unwrap().commit(&committed);
-        state.saver.request();
+        state.user.lock().unwrap().history.commit(&committed);
+        state.saver.request_history();
     }
     Ok(())
+}
+
+/// ユーザー辞書の語（画面とのやりとり用）
+#[derive(Serialize, Deserialize)]
+pub struct UserWordDto {
+    reading: String,
+    surface: String,
+    /// "noun"・"person"・"place"・"organization"
+    pos: String,
+}
+
+impl From<&UserWord> for UserWordDto {
+    fn from(w: &UserWord) -> Self {
+        UserWordDto {
+            reading: w.reading.clone(),
+            surface: w.surface.clone(),
+            pos: w.pos.name().to_owned(),
+        }
+    }
+}
+
+fn user_words(dictionary: &suzuri_engine::UserDictionary) -> Vec<UserWordDto> {
+    dictionary.words().iter().map(UserWordDto::from).collect()
+}
+
+fn parse_pos(pos: &str) -> Result<UserPos, String> {
+    UserPos::from_name(pos).ok_or_else(|| format!("品詞が違います: {pos}"))
+}
+
+/// 登録した順に返す
+#[tauri::command]
+pub fn list_user_words(state: State<'_, AppState>) -> Vec<UserWordDto> {
+    user_words(&state.user.lock().unwrap().dictionary)
+}
+
+/// 語を登録し、登録後の一覧を返す。読みや表記が正しくなければ、画面に出す理由を返す
+#[tauri::command]
+pub fn add_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {
+    let pos = parse_pos(&word.pos)?;
+    let mut user = state.user.lock().unwrap();
+    user.dictionary
+        .add(&word.reading, &word.surface, pos)
+        .map_err(|e| e.to_string())?;
+    state.saver.request_dictionary();
+    Ok(user_words(&user.dictionary))
+}
+
+/// 語を消し、消したあとの一覧を返す
+#[tauri::command]
+pub fn remove_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {
+    let target = UserWord {
+        reading: word.reading,
+        surface: word.surface,
+        pos: parse_pos(&word.pos)?,
+    };
+    let mut user = state.user.lock().unwrap();
+    if user.dictionary.remove(&target) {
+        state.saver.request_dictionary();
+    }
+    Ok(user_words(&user.dictionary))
 }
 
 /// 閉じる。return_focus なら呼び出し元にフォーカスを戻す。

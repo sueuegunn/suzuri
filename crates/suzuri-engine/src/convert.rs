@@ -1,6 +1,6 @@
 //! 文節の区切りと候補の生成。
 //!
-//! 1. 読みの各位置から辞書を引いて単語を並べる（ラティス）
+//! 1. 読みの各位置から辞書（システム辞書とユーザー辞書）を引いて単語を並べる（ラティス）
 //! 2. Viterbi で、単語コストと接続コストの合計が最小の並びを求める
 //! 3. 隣り合う単語の品詞から文節境界を判定する（Mozc の segmenter.def を辞書に焼き込んだもの）
 //! 4. 文節ごとに、前後の文脈を固定してその範囲だけの上位候補を求める
@@ -8,12 +8,17 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
+use crate::UserData;
 use crate::dict::Dictionary;
 use crate::history::UserHistory;
 use crate::kana::{ascii_variants, hiragana_to_katakana, symbol_variants};
+use crate::user_dict::UserDictionary;
 
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
 const UNKNOWN_COST: i32 = 20_000;
+/// ユーザー辞書の語のコスト。同じ読みのシステム辞書の語より出やすく、
+/// ほかの語の一部に読みが現れたとき（「たなか」と「きたなかった」）にまで割り込みすぎない値にする
+const USER_WORD_COST: i32 = 2000;
 /// 半角数字の並び（「1000」「3.14」）を1語にしたときのコスト。Mozc の「いち → 1」（753）と同じくらいにする
 const NUMBER_COST: i32 = 700;
 /// 文節ごとに保持する途中経路の数
@@ -51,12 +56,23 @@ struct Node {
     lid: u16,
     rid: u16,
     cost: i32,
-    /// 辞書の単語の番号。None は未知語
-    entry: Option<u32>,
+    source: Source,
+}
+
+/// 単語がどこから来たか
+#[derive(Debug, Clone, Copy)]
+enum Source {
+    /// 辞書にない文字や英数字の並び。表記は読みのまま
+    Plain,
+    /// システム辞書の単語の番号
+    System(u32),
+    /// ユーザー辞書の語の番号
+    User(u32),
 }
 
 struct Lattice<'a> {
     reading: &'a str,
+    user: &'a UserDictionary,
     /// 文字位置 → バイト位置（末尾を含む）
     offsets: Vec<usize>,
     nodes: Vec<Node>,
@@ -85,9 +101,9 @@ impl Engine {
     }
 
     /// 読みを自動で文節に区切り、各文節の候補を返す
-    pub fn convert(&self, reading: &str, history: &UserHistory) -> Conversion {
+    pub fn convert(&self, reading: &str, user: &UserData) -> Conversion {
         let n = reading.chars().count();
-        self.run(reading, &[], std::slice::from_ref(&(0..n)), history)
+        self.run(reading, &[], std::slice::from_ref(&(0..n)), user)
     }
 
     /// ユーザーが決めた区切り（文字位置）に従って、各文節の候補を返す
@@ -95,9 +111,9 @@ impl Engine {
         &self,
         reading: &str,
         boundaries: &[usize],
-        history: &UserHistory,
+        user: &UserData,
     ) -> Conversion {
-        self.run(reading, boundaries, &[], history)
+        self.run(reading, boundaries, &[], user)
     }
 
     /// `boundaries` は保ったまま、`range` の内側だけ自動で区切り直す。
@@ -107,9 +123,9 @@ impl Engine {
         reading: &str,
         boundaries: &[usize],
         range: Range<usize>,
-        history: &UserHistory,
+        user: &UserData,
     ) -> Conversion {
-        self.run(reading, boundaries, &[range], history)
+        self.run(reading, boundaries, &[range], user)
     }
 
     /// `boundaries` は保ったまま、`ranges` のそれぞれの内側だけ自動で区切り直す。
@@ -119,9 +135,9 @@ impl Engine {
         reading: &str,
         boundaries: &[usize],
         ranges: &[Range<usize>],
-        history: &UserHistory,
+        user: &UserData,
     ) -> Conversion {
-        self.run(reading, boundaries, ranges, history)
+        self.run(reading, boundaries, ranges, user)
     }
 
     fn run(
@@ -129,14 +145,14 @@ impl Engine {
         reading: &str,
         boundaries: &[usize],
         auto: &[Range<usize>],
-        history: &UserHistory,
+        user: &UserData,
     ) -> Conversion {
         // 自動で区切る範囲の内側か（範囲の端は固定した区切りとして残す）
         let inside = |p: usize| auto.iter().any(|r| r.start < p && p < r.end);
         if reading.is_empty() {
             return Conversion { segments: vec![] };
         }
-        let lat = self.build_lattice(reading);
+        let lat = self.build_lattice(reading, &user.dictionary);
         let n = lat.len();
         let mut fixed: Vec<usize> = boundaries
             .iter()
@@ -174,12 +190,12 @@ impl Engine {
         edges.push(n);
         let segments = edges
             .windows(2)
-            .map(|w| self.segment(&lat, &path, w[0]..w[1], history))
+            .map(|w| self.segment(&lat, &path, w[0]..w[1], &user.history))
             .collect();
         Conversion { segments }
     }
 
-    fn build_lattice<'a>(&self, reading: &'a str) -> Lattice<'a> {
+    fn build_lattice<'a>(&self, reading: &'a str, user: &'a UserDictionary) -> Lattice<'a> {
         let offsets: Vec<usize> = reading
             .char_indices()
             .map(|(i, _)| i)
@@ -204,7 +220,7 @@ impl Engine {
                 lid: unknown,
                 rid: unknown,
                 cost: UNKNOWN_COST,
-                entry: None,
+                source: Source::Plain,
             });
             // 英数字の並び（「UI」「MP3」「3.14」）は辞書にないので、まとめて1語にする
             let in_run = |i: usize| in_ascii_run(&chars, i);
@@ -223,7 +239,7 @@ impl Engine {
                         lid: id,
                         rid: id,
                         cost,
-                        entry: None,
+                        source: Source::Plain,
                     });
                 }
             }
@@ -240,13 +256,28 @@ impl Engine {
                             lid: e.lid,
                             rid: e.rid,
                             cost: e.cost as i32,
-                            entry: Some(i),
+                            source: Source::System(i),
                         });
                     }
                 });
+            // ユーザー辞書は登録した一番長い読みまで、長さごとに引く
+            for end in start + 1..=n.min(start + user.max_chars()) {
+                for &i in user.lookup(&reading[offsets[start]..offsets[end]]) {
+                    let id = self.dict.user_pos_id(user.word(i).pos);
+                    push(Node {
+                        start,
+                        end,
+                        lid: id,
+                        rid: id,
+                        cost: USER_WORD_COST,
+                        source: Source::User(i),
+                    });
+                }
+            }
         }
         Lattice {
             reading,
+            user,
             offsets,
             nodes,
             by_start,
@@ -256,9 +287,10 @@ impl Engine {
 
     fn surface(&self, lat: &Lattice, node: &Node) -> String {
         let reading = lat.slice(node.start..node.end);
-        match node.entry {
-            Some(i) => self.dict.entry(i).surface.resolve(reading).into_owned(),
-            None => reading.to_owned(),
+        match node.source {
+            Source::System(i) => self.dict.entry(i).surface.resolve(reading).into_owned(),
+            Source::User(i) => lat.user.word(i).surface.clone(),
+            Source::Plain => reading.to_owned(),
         }
     }
 
@@ -422,6 +454,7 @@ mod tests {
     use super::*;
     use crate::dict::{DictionaryBuilder, RawEntry};
     use crate::history::Committed;
+    use crate::user_dict::UserPos;
 
     // 0: BOS/EOS, 1: 名詞, 2: 助詞, 3: 動詞, 4: 未知語
     const NOUN: u16 = 1;
@@ -430,6 +463,7 @@ mod tests {
 
     fn engine() -> Engine {
         let mut b = DictionaryBuilder::new(5, 4);
+        b.set_user_pos(UserPos::Noun, NOUN);
         for rid in 0..5 {
             for lid in 0..5 {
                 b.set_connection(rid, lid, 1000);
@@ -474,21 +508,21 @@ mod tests {
     #[test]
     fn segments_automatically() {
         let e = engine();
-        let c = e.convert("わたしははしをわたる", &UserHistory::default());
+        let c = e.convert("わたしははしをわたる", &UserData::default());
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
     }
 
     #[test]
     fn follows_given_boundaries() {
         let e = engine();
-        let c = e.convert_with_boundaries("わたしははし", &[2], &UserHistory::default());
+        let c = e.convert_with_boundaries("わたしははし", &[2], &UserData::default());
         assert_eq!(view(&c), [(0, 2, "綿"), (2, 6, "氏は橋")]);
     }
 
     #[test]
     fn lists_alternatives_and_kana() {
         let e = engine();
-        let c = e.convert_with_boundaries("はし", &[], &UserHistory::default());
+        let c = e.convert_with_boundaries("はし", &[], &UserData::default());
         let cands = &c.segments[0].candidates;
         assert_eq!(&cands[..2], ["橋", "箸"]);
         assert!(cands.contains(&"はし".to_string()));
@@ -498,30 +532,49 @@ mod tests {
     #[test]
     fn learned_candidate_comes_first() {
         let e = engine();
-        let mut h = UserHistory::default();
-        h.commit(&[Committed {
+        let mut user = UserData::default();
+        user.history.commit(&[Committed {
             reading: "はし".into(),
             surface: "箸".into(),
             was_first: false,
         }]);
-        let c = e.convert_with_boundaries("はし", &[], &h);
+        let c = e.convert_with_boundaries("はし", &[], &user);
         assert_eq!(c.segments[0].candidates[0], "箸");
+    }
+
+    #[test]
+    fn user_word_comes_first() {
+        let e = engine();
+        let mut user = UserData::default();
+        user.dictionary.add("はし", "ハシ社", UserPos::Noun).unwrap();
+        let c = e.convert_with_boundaries("はし", &[], &user);
+        assert_eq!(&c.segments[0].candidates[..3], ["ハシ社", "橋", "箸"]);
+    }
+
+    #[test]
+    fn user_word_is_not_split() {
+        let e = engine();
+        let mut user = UserData::default();
+        // 登録しなければ「私は｜橋」
+        user.dictionary.add("ははし", "ハハシ", UserPos::Noun).unwrap();
+        let c = e.convert("わたしははし", &user);
+        assert_eq!(view(&c), [(0, 3, "私"), (3, 6, "ハハシ")]);
     }
 
     #[test]
     fn resegments_only_inside_range() {
         let e = engine();
         // 0..4 は1文節に固定し、4..10 だけ自動で区切る
-        let c = e.resegment("わたしははしをわたる", &[4], 4..10, &UserHistory::default());
+        let c = e.resegment("わたしははしをわたる", &[4], 4..10, &UserData::default());
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
-        let c = e.resegment("わたしははしをわたる", &[2], 4..10, &UserHistory::default());
+        let c = e.resegment("わたしははしをわたる", &[2], 4..10, &UserData::default());
         assert_eq!(c.segments[0].end, 2);
     }
 
     #[test]
     fn resegments_several_ranges() {
         let e = engine();
-        let h = UserHistory::default();
+        let h = UserData::default();
         // 4..7 を1文節に固定し、その両側（0..4 と 7..10）をそれぞれ自動で区切る
         let c = e.resegment_ranges("わたしははしをわたる", &[1, 4, 7, 9], &[0..4, 7..10], &h);
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
@@ -536,22 +589,22 @@ mod tests {
     #[test]
     fn keeps_ascii_run_as_one_word() {
         let e = engine();
-        let c = e.convert("NPMをわたる", &UserHistory::default());
+        let c = e.convert("NPMをわたる", &UserData::default());
         assert_eq!(view(&c), [(0, 4, "NPMを"), (4, 7, "渡る")]);
         assert_eq!(&c.segments[0].candidates[..4], ["NPMを", "npmを", "Npmを", "ＮＰＭを"]);
-        let c = e.convert("UI", &UserHistory::default());
+        let c = e.convert("UI", &UserData::default());
         assert_eq!(c.segments[0].candidates, ["UI", "ui", "Ui", "ＵＩ"]);
-        let c = e.convert("A", &UserHistory::default());
+        let c = e.convert("A", &UserData::default());
         assert_eq!(c.segments[0].candidates, ["A", "a", "Ａ"]);
         // 小文字で打ったときも、大文字をホイールで選べる
-        let c = e.convert("npmを", &UserHistory::default());
+        let c = e.convert("npmを", &UserData::default());
         assert_eq!(&c.segments[0].candidates[..4], ["npmを", "NPMを", "Npmを", "ｎｐｍを"]);
     }
 
     #[test]
     fn keeps_decimal_number_as_one_word() {
         let e = engine();
-        let c = e.convert("3.14を1,000", &UserHistory::default());
+        let c = e.convert("3.14を1,000", &UserData::default());
         let readings: Vec<&str> = c.segments.iter().map(|s| s.reading.as_str()).collect();
         assert_eq!(readings, ["3.14を", "1,000"]);
     }
@@ -559,14 +612,14 @@ mod tests {
     #[test]
     fn lists_symbol_variants() {
         let e = engine();
-        let c = e.convert("。", &UserHistory::default());
+        let c = e.convert("。", &UserData::default());
         assert_eq!(c.segments[0].candidates, ["。", ".", "．"]);
     }
 
     #[test]
     fn makes_space_its_own_segment() {
         let e = engine();
-        let c = e.convert("UI をわたる", &UserHistory::default());
+        let c = e.convert("UI をわたる", &UserData::default());
         let readings: Vec<&str> = c.segments.iter().map(|s| s.reading.as_str()).collect();
         assert_eq!(readings, ["UI", " ", "を", "わたる"]);
         assert_eq!(c.segments[1].candidates, [" ", "　"]);
@@ -575,9 +628,9 @@ mod tests {
     #[test]
     fn handles_unknown_characters() {
         let e = engine();
-        let c = e.convert("ぬ1", &UserHistory::default());
+        let c = e.convert("ぬ1", &UserData::default());
         let text: String = c.segments.iter().map(|s| s.candidates[0].as_str()).collect();
         assert_eq!(text, "ぬ1");
-        assert!(e.convert("", &UserHistory::default()).segments.is_empty());
+        assert!(e.convert("", &UserData::default()).segments.is_empty());
     }
 }

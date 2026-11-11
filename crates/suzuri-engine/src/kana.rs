@@ -10,6 +10,16 @@ pub fn hiragana_to_katakana(text: &str) -> String {
         .collect()
 }
 
+/// カタカナをひらがなにする。カタカナ以外（「ー」も）はそのまま残す。
+pub fn katakana_to_hiragana(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            'ァ'..='ヶ' | 'ヽ' | 'ヾ' => char::from_u32(c as u32 - 0x60).unwrap_or(c),
+            _ => c,
+        })
+        .collect()
+}
+
 /// 英字の書き分けの候補（大文字・小文字・先頭だけ大文字・全角）。英字を含まなければ空
 pub fn ascii_variants(text: &str) -> Vec<String> {
     if !text.chars().any(|c| c.is_ascii_alphabetic()) {
