@@ -87,13 +87,15 @@ pub fn show(app: &AppHandle, mode: Mode) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
     };
-    platform::before_show(app);
+    // 置き直しと状態の切り替えは before_show より先に済ませる。macOS では before_show でアプリを表に戻した瞬間に
+    // オーバーレイが出ることがあり、後から動かすと前の位置に一瞬見える
     place(app, &window);
     // 表示する前に状態を切り替えさせ、前の内容が一瞬見えないようにする
     let state = app.state::<AppState>();
     let ime_japanese = *state.ime_japanese.lock().unwrap();
     let input = input_mode(state.settings.get().start_input_mode, ime_japanese);
     let _ = window.emit("summon", Summon { mode, input });
+    platform::before_show(app);
     let _ = window.show();
     let _ = window.set_focus();
 }

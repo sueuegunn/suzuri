@@ -258,7 +258,13 @@ pub fn return_focus(app: &AppHandle, to: Caller) -> bool {
     }
     #[cfg(target_os = "macos")]
     {
+        use tauri::Manager;
         let _ = to;
+        // アプリを隠すときに出ていたウィンドウは、次にアプリを表に戻したとき（before_show）に元の位置で出てしまう。
+        // 先にオーバーレイを隠しておき、呼び出し直したときに前の位置で一瞬見えないようにする
+        if let Some(window) = app.get_webview_window(crate::overlay::LABEL) {
+            let _ = window.hide();
+        }
         app.hide().is_ok()
     }
     #[cfg(not(any(windows, target_os = "macos")))]
