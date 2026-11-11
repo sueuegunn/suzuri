@@ -639,7 +639,8 @@ body.settings-body {
   padding: 4px 12px;
   font-size: 13px;
   white-space: nowrap;
-  color: var(--fg);
+  /* 円の印と同じ青にする */
+  color: var(--accent);
   background: var(--popover);
   border: 1px solid var(--popover-border);
   border-radius: 999px;
