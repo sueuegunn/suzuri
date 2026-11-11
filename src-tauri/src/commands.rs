@@ -222,20 +222,22 @@ pub fn list_user_words(state: State<'_, AppState>) -> Vec<UserWordDto> {
 
 /// 語を登録し、登録後の一覧を返す。読みや表記が正しくなければ、画面に出す理由を返す
 #[tauri::command]
-pub fn add_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {
+pub fn add_user_word(app: AppHandle, state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {
     let pos = parse_pos(&word.pos)?;
     let mut user = state.user.lock().unwrap();
     user.dictionary
         .add(&word.reading, &word.surface, pos)
         .map_err(|e| e.to_string())?;
     state.saver.request_dictionary();
+    // 開いている設定画面の一覧を読み直させる
+    let _ = app.emit("user-dictionary", ());
     Ok(user_words(&user.dictionary))
 }
 
 /// オーバーレイの下段の文節（いくつかをつないだものでもよい）を、名詞としてユーザー辞書に登録する。
 /// 末尾の助詞・助動詞は除く（「スズリで」は「スズリ」）。登録した語を返し、取り消すときに remove_user_word へ渡す
 #[tauri::command]
-pub fn register_segment(state: State<'_, AppState>, reading: String, surface: String) -> Result<UserWordDto, String> {
+pub fn register_segment(app: AppHandle, state: State<'_, AppState>, reading: String, surface: String) -> Result<UserWordDto, String> {
     let mut user = state.user.lock().unwrap();
     let (reading, surface) = state.engine.content_word(&reading, &surface, &user);
     let word = user
@@ -243,12 +245,14 @@ pub fn register_segment(state: State<'_, AppState>, reading: String, surface: St
         .add(&reading, &surface, UserPos::Noun)
         .map_err(|e| e.to_string())?;
     state.saver.request_dictionary();
+    // 開いている設定画面の一覧を読み直させる
+    let _ = app.emit("user-dictionary", ());
     Ok(UserWordDto::from(&word))
 }
 
 /// 語を消し、消したあとの一覧を返す
 #[tauri::command]
-pub fn remove_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {
+pub fn remove_user_word(app: AppHandle, state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {
     let target = UserWord {
         reading: word.reading,
         surface: word.surface,
@@ -257,6 +261,8 @@ pub fn remove_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result
     let mut user = state.user.lock().unwrap();
     if user.dictionary.remove(&target) {
         state.saver.request_dictionary();
+        // 開いている設定画面の一覧を読み直させる
+        let _ = app.emit("user-dictionary", ());
     }
     Ok(user_words(&user.dictionary))
 }

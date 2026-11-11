@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { userDictionary, type UserPos, type UserWord } from "./engine";
 
 /** 品詞の選択肢。並びは画面に出す順 */
@@ -20,10 +21,17 @@ export default function UserDictionarySettings() {
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
 
   useEffect(() => {
-    userDictionary
-      .list()
-      .then(setWords)
-      .catch((e) => setMessage({ text: String(e), error: true }));
+    const load = () =>
+      userDictionary
+        .list()
+        .then(setWords)
+        .catch((e) => setMessage({ text: String(e), error: true }));
+    load();
+    // 設定画面を開いたまま、オーバーレイの下段から登録・取り消しをしたときも一覧を読み直す
+    const unlisten = listen("user-dictionary", load);
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
 
   const add = async () => {
