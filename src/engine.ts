@@ -43,6 +43,9 @@ export const settings = {
   setAppearance: (appearance: Appearance) => invoke<Appearance>("set_appearance", { appearance }),
   /** 覚えたオーバーレイの位置と大きさを忘れる */
   resetWindowGeometry: () => invoke<void>("reset_window_geometry"),
+  /** 貼り付けモードで貼り付けたあとも、クリップボードに残すか */
+  getKeepPastedInClipboard: () => invoke<boolean>("get_keep_pasted_in_clipboard"),
+  setKeepPastedInClipboard: (keep: boolean) => invoke<void>("set_keep_pasted_in_clipboard", { keep }),
 };
 
 /** 見た目の設定を CSS の変数に反映する */

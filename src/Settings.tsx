@@ -24,6 +24,7 @@ export default function Settings() {
   const [recording, setRecording] = useState<keyof Bindings | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [appearance, setAppearance] = useState<Appearance | null>(null);
+  const [keepPasted, setKeepPasted] = useState<boolean | null>(null);
   const appearanceTimer = useRef<number | undefined>(undefined);
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
@@ -31,7 +32,16 @@ export default function Settings() {
   useEffect(() => {
     settings.get().then(setBindings);
     settings.getAppearance().then(setAppearance);
+    settings.getKeepPastedInClipboard().then(setKeepPasted);
   }, []);
+
+  const changeKeepPasted = (keep: boolean) => {
+    setKeepPasted(keep);
+    settings.setKeepPastedInClipboard(keep).catch((e) => {
+      setKeepPasted(!keep);
+      setMessage({ text: String(e), error: true });
+    });
+  };
 
   const stop = () => {
     setRecording(null);
@@ -111,6 +121,16 @@ export default function Settings() {
           既定に戻す
         </button>
       </div>
+      <h1>貼り付け</h1>
+      <label className="settings-row">
+        <span>貼り付けたあともクリップボードに残す</span>
+        <input
+          type="checkbox"
+          checked={keepPasted ?? false}
+          disabled={keepPasted === null || recording !== null}
+          onChange={(e) => changeKeepPasted(e.target.checked)}
+        />
+      </label>
       <h1>見た目</h1>
       {SLIDERS.map(({ key, title, min, max, step }) => (
         <div className="settings-row" key={key}>

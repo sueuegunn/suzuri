@@ -16,6 +16,37 @@ use crate::{AppState, overlay, platform};
 /// 戻りきる前に送ると、貼り付けが空振りするアプリがある
 const PASTE_DELAY: Duration = Duration::from_millis(100);
 
+/// 貼り付けのキーを送ってから、クリップボードを元に戻すまでの待ち時間。
+/// 貼り付け先のアプリがクリップボードを読み終える前に戻すと、元の中身が貼られてしまう
+const RESTORE_DELAY: Duration = Duration::from_millis(500);
+
+/// しばらく待ってから、クリップボードを貼り付ける前の中身に戻す（None なら空にする）。
+/// 待つ間にほかのものがコピーされていたら、そちらを残す
+fn restore_clipboard_later(app: AppHandle, pasted: String, previous: Option<String>) {
+    thread::spawn(move || {
+        thread::sleep(RESTORE_DELAY);
+        let main = app.clone();
+        let done = app.run_on_main_thread(move || {
+            let clipboard = main.clipboard();
+            // Windows は改行を CRLF にして返すことがあるので、改行をそろえて比べる
+            let current = clipboard.read_text().unwrap_or_default();
+            if current.replace("\r\n", "\n") != pasted.replace("\r\n", "\n") {
+                return;
+            }
+            let restored = match previous {
+                Some(text) => clipboard.write_text(text),
+                None => clipboard.clear(),
+            };
+            if let Err(e) = restored {
+                eprintln!("クリップボードを元に戻せません: {e}");
+            }
+        });
+        if let Err(e) = done {
+            eprintln!("クリップボードを元に戻せません: {e}");
+        }
+    });
+}
+
 #[derive(Serialize)]
 pub struct SegmentDto {
     start: usize,
@@ -87,7 +118,8 @@ pub struct CommittedDto {
 
 /// 変換結果をクリップボードに入れて閉じ、選んだ候補を学習する。
 /// `paste` なら呼び出し元のウィンドウにフォーカスを戻して貼り付ける。
-/// 貼り付けに失敗しても手で貼れるよう、クリップボードには残す
+/// 貼り付けたあとは、設定で残すことにしていなければ、クリップボードを元の中身に戻す。
+/// 貼り付けのキーを送れなかったときは、手で貼れるようクリップボードに残す
 #[tauri::command]
 pub fn commit(
     app: AppHandle,
@@ -96,6 +128,9 @@ pub fn commit(
     segments: Vec<CommittedDto>,
     paste: bool,
 ) -> Result<(), String> {
+    // 戻すときのために、書く前の中身を覚えておく。文字でなければ（空・画像など）None で、戻すときは空にする
+    let restore = (paste && !state.settings.get().keep_pasted_in_clipboard)
+        .then(|| (text.clone(), app.clipboard().read_text().ok()));
     let written = app.clipboard().write_text(text).map_err(|e| e.to_string());
     // 呼び出し元のウィンドウが閉じられていたら、貼り付けはせずクリップボードに入れるだけにする
     let caller = state
@@ -112,13 +147,19 @@ pub fn commit(
             thread::sleep(PASTE_DELAY);
             // キーの送信はメインスレッドで行う。macOS では、キーボード配列から「v」のキーを調べる
             // 入力ソースの API がメインスレッド以外から呼ばれると、アプリが強制終了する
+            let app = main.clone();
             let sent = main.run_on_main_thread(move || {
                 // 待っている間に前面が別のウィンドウに変わっていたら送らない
                 if !platform::is_foreground(caller) {
                     return;
                 }
-                if let Err(e) = platform::send_paste() {
-                    eprintln!("貼り付けのキーを送れません: {e}");
+                match platform::send_paste() {
+                    Ok(()) => {
+                        if let Some((pasted, previous)) = restore {
+                            restore_clipboard_later(app, pasted, previous);
+                        }
+                    }
+                    Err(e) => eprintln!("貼り付けのキーを送れません: {e}"),
                 }
             });
             if let Err(e) = sent {
@@ -183,6 +224,16 @@ pub fn set_appearance(app: AppHandle, state: State<'_, AppState>, appearance: Ap
     state.settings.update(|f| f.appearance = appearance)?;
     let _ = app.emit("appearance", appearance);
     Ok(appearance)
+}
+
+#[tauri::command]
+pub fn get_keep_pasted_in_clipboard(state: State<'_, AppState>) -> bool {
+    state.settings.get().keep_pasted_in_clipboard
+}
+
+#[tauri::command]
+pub fn set_keep_pasted_in_clipboard(state: State<'_, AppState>, keep: bool) -> Result<(), String> {
+    state.settings.update(|f| f.keep_pasted_in_clipboard = keep)
 }
 
 /// 覚えたオーバーレイの位置と大きさを忘れる。次に開くときは既定の大きさで、マウスのあるモニターの中央に出す

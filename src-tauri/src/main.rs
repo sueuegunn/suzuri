@@ -255,6 +255,8 @@ fn main() {
             commands::get_appearance,
             commands::set_appearance,
             commands::reset_window_geometry,
+            commands::get_keep_pasted_in_clipboard,
+            commands::set_keep_pasted_in_clipboard,
             commands::center_overlay,
             commands::read_clipboard,
         ])

@@ -109,6 +109,9 @@ pub struct SettingsFile {
     pub window_positions: Vec<WindowPosition>,
     /// 手で大きさを変えていなければ None。そのときは既定の大きさで出す
     pub window_size: Option<WindowSize>,
+    /// 貼り付けモードで貼り付けたあとも、確定した文をクリップボードに残すか。
+    /// 残さないときは、貼り付けのためにいったん入れ、貼り付けたら元の中身に戻す
+    pub keep_pasted_in_clipboard: bool,
 }
 
 impl SettingsFile {
@@ -193,6 +196,8 @@ mod tests {
         assert_eq!(file.start_input_mode, StartInputMode::Alnum);
         assert!(file.shortcuts == Bindings::default());
         assert!(file.appearance == Appearance::default());
+        // 項目がない古い設定では、貼り付けたあとクリップボードに残さない
+        assert!(!file.keep_pasted_in_clipboard);
     }
 
     #[test]
