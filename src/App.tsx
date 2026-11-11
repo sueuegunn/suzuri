@@ -35,6 +35,8 @@ const WHEEL_LINE_PX = 40;
 const PIN_DRAG_START_PX = 4;
 /** ピンの上で左ボタンを押してからこれより短く離し、ほとんど動かさなければ、クリックとみなして入力カーソルを置く */
 const PIN_CLICK_MS = 300;
+/** ドラッグ中に端を越えて反対側へ移したあと、これだけの間は次を移さない。移す前の位置のイベントが遅れて届き、戻されないようにする */
+const WRAP_COOLDOWN_MS = 100;
 /** 候補一覧に並べる数 */
 const CANDIDATE_LIST_SIZE = 9;
 
@@ -453,6 +455,26 @@ export default function App() {
     return x < r.left + r.width / 2 ? pos : pos + 1;
   };
 
+  /**
+   * ドラッグ中にポインターがパネルの左右の端を越えたら、反対側の端へ移す。越えた分だけ内側に入れる。
+   * ドラッグ中はポインターを捕まえているので、ウィンドウの外に出てもイベントが届く
+   */
+  const lastWrapRef = useRef(0);
+  const wrapAtEdges = (e: React.PointerEvent) => {
+    const r = panelRef.current?.getBoundingClientRect();
+    const now = performance.now();
+    if (!r || now - lastWrapRef.current < WRAP_COOLDOWN_MS) return;
+    let x;
+    if (e.clientX < r.left) x = e.clientX + r.width;
+    else if (e.clientX >= r.right) x = e.clientX - r.width;
+    else return;
+    x = Math.min(Math.max(x, r.left + 1), r.right - 2);
+    lastWrapRef.current = now;
+    getCurrentWindow()
+      .setCursorPosition(new LogicalPosition(x, e.clientY))
+      .catch(() => {});
+  };
+
   /** 文字の上で右ボタンを押したら、範囲の選択を始める。動かさずに離したらピンを足す */
   const onCharRightDown = (pos: number, e: React.PointerEvent) => {
     if (!isRightButton(e) || !sessionRef.current.segments) return;
@@ -483,6 +505,7 @@ export default function App() {
     }
     const r = rangeRef.current;
     if (!r) return;
+    wrapAtEdges(e);
     const g = gapFromPoint(e.clientX, e.clientY);
     if (g !== null && g !== r.to) setRange({ ...r, to: g });
   };
@@ -581,6 +604,7 @@ export default function App() {
 
   const onPinMove = (pin: number, e: React.PointerEvent) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    wrapAtEdges(e);
     const s = sessionRef.current;
     if (!s.segments) return;
     const target = clampPin(boundariesOf(s.segments), pin, nearestGap(e.clientX, e.clientY), length(s.kana));
