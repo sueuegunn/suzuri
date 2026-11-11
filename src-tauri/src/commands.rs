@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use suzuri_engine::{Committed, Conversion, UserPos, UserWord};
+use suzuri_engine::{CommitSegment, Conversion, UserPos, UserWord};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -114,6 +114,9 @@ pub struct CommittedDto {
     reading: String,
     surface: String,
     was_first: bool,
+    /// 手で置いたピンに接するか（区切りの学習の対象）
+    #[serde(default)]
+    manual: bool,
 }
 
 /// 変換結果をクリップボードに入れて閉じ、選んだ候補を学習する。
@@ -169,15 +172,16 @@ pub fn commit(
     }
     written?;
     if !segments.is_empty() {
-        let committed: Vec<Committed> = segments
+        let committed: Vec<CommitSegment> = segments
             .into_iter()
-            .map(|s| Committed {
+            .map(|s| CommitSegment {
                 reading: s.reading,
                 surface: s.surface,
                 was_first: s.was_first,
+                manual: s.manual,
             })
             .collect();
-        state.user.lock().unwrap().history.commit(&committed);
+        state.engine.commit(&mut state.user.lock().unwrap(), &committed);
         state.saver.request_history();
     }
     Ok(())

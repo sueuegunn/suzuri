@@ -8,10 +8,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use suzuri_engine::history::{DEFAULT_CAPACITY, UserHistory};
+use suzuri_engine::learned::{self, LearnedWords};
 use suzuri_engine::{UserData, UserDictionary};
 
 pub struct Paths {
     pub history: PathBuf,
+    /// 区切りの学習。学習データと一緒に保存し、一緒にリセットする
+    pub learned: PathBuf,
     pub dictionary: PathBuf,
 }
 
@@ -35,7 +38,18 @@ pub fn load(paths: &Paths) -> UserData {
         }),
         Err(_) => UserDictionary::default(),
     };
-    UserData { history, dictionary }
+    let learned = match fs::read_to_string(&paths.learned) {
+        Ok(text) => LearnedWords::deserialize(&text, learned::DEFAULT_CAPACITY).unwrap_or_else(|e| {
+            eprintln!("{e}。区切りの学習を空にして始めます");
+            LearnedWords::default()
+        }),
+        Err(_) => LearnedWords::default(),
+    };
+    UserData {
+        history,
+        dictionary,
+        learned,
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -47,7 +61,7 @@ enum Target {
 pub struct Saver(Sender<Target>);
 
 impl Saver {
-    /// 学習データの保存を頼む。すぐに戻る
+    /// 学習データ（選んだ候補と区切りの学習）の保存を頼む。すぐに戻る
     pub fn request_history(&self) {
         let _ = self.0.send(Target::History);
     }
@@ -71,9 +85,15 @@ pub fn spawn(paths: Paths, user: Arc<Mutex<UserData>>) -> Saver {
                 }
             }
             if history {
-                let text = user.lock().unwrap().history.serialize();
+                let (text, learned) = {
+                    let user = user.lock().unwrap();
+                    (user.history.serialize(), user.learned.serialize())
+                };
                 if let Err(e) = save(&paths.history, &text) {
                     eprintln!("学習データを保存できません: {e}");
+                }
+                if let Err(e) = save(&paths.learned, &learned) {
+                    eprintln!("区切りの学習を保存できません: {e}");
                 }
             }
             if dictionary {

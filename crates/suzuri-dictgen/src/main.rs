@@ -81,6 +81,10 @@ fn main() -> Result<()> {
         let id = pos.iter().position(|p| p == name).ok_or(format!("{name} が id.def にありません"))?;
         builder.set_user_pos(user_pos, id as u16);
     }
+    // 文節を自立語と付属語に分けるときの付属語。文脈つきの学習で文節の自立語を取り出すのに使う
+    for (id, name) in pos.iter().enumerate() {
+        builder.set_functional(id as u16, name.starts_with("助詞,") || name.starts_with("助動詞,"));
+    }
 
     apply_connection(&mut builder, &read("src/data/dictionary_oss/connection_single_column.txt")?, pos.len())?;
     let segmenter = format!("{SEGMENTER_OVERRIDES}{}", read("src/data/rules/segmenter.def")?);

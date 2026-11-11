@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::UserHistory;
+use suzuri_engine::learned::LearnedWords;
 use suzuri_engine::{Engine, UserData};
 use settings::{StartInputMode, Theme};
 use tauri::{Emitter, Manager};
@@ -105,6 +106,7 @@ fn main() {
             let data_dir = app.path().app_data_dir()?;
             let paths = user_store::Paths {
                 history: data_dir.join("history.tsv"),
+                learned: data_dir.join("learned_words.tsv"),
                 dictionary: data_dir.join("user_dictionary.tsv"),
             };
             let user = Arc::new(Mutex::new(user_store::load(&paths)));
@@ -188,7 +190,11 @@ fn main() {
                     "reset_history" => {
                         let state = app.state::<AppState>();
                         // ユーザー辞書は学習ではないので消さない
-                        state.user.lock().unwrap().history = UserHistory::default();
+                        {
+                            let mut user = state.user.lock().unwrap();
+                            user.history = UserHistory::default();
+                            user.learned = LearnedWords::default();
+                        }
                         state.saver.request_history();
                     }
                     "autostart" => {

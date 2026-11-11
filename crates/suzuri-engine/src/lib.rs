@@ -6,9 +6,10 @@ mod convert;
 pub mod dict;
 pub mod history;
 pub mod kana;
+pub mod learned;
 pub mod user_dict;
 
-pub use convert::{Conversion, Engine, Segment};
+pub use convert::{CommitSegment, Conversion, Engine, Segment};
 pub use history::{Committed, HistoryError, UserHistory};
 pub use user_dict::{UserDictError, UserDictionary, UserPos, UserWord};
 
@@ -19,4 +20,6 @@ pub struct UserData {
     pub history: UserHistory,
     /// ユーザーが登録した語
     pub dictionary: UserDictionary,
+    /// 手で区切った文節（区切りの学習）
+    pub learned: learned::LearnedWords,
 }

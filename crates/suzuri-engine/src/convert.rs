@@ -10,15 +10,21 @@ use std::ops::Range;
 
 use crate::UserData;
 use crate::dict::Dictionary;
-use crate::history::UserHistory;
+use crate::history::{Committed, UserHistory};
 use crate::kana::{ascii_variants, hiragana_to_katakana, symbol_variants};
-use crate::user_dict::UserDictionary;
 
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
 const UNKNOWN_COST: i32 = 20_000;
 /// ユーザー辞書の語のコスト。同じ読みのシステム辞書の語より出やすく、
 /// ほかの語の一部に読みが現れたとき（「たなか」と「きたなかった」）にまで割り込みすぎない値にする
 const USER_WORD_COST: i32 = 2000;
+/// 区切りの学習で覚えた語を、覚えたときの単語の並びよりこれだけ出やすくする。
+/// 必ずその区切りにはせず「なりやすい」程度にとどめる（ほかの文で誤って効いたときに直しやすいように）
+const LEARNED_BONUS: i32 = 1000;
+/// 辞書の単語の並びで作れない表記（カタカナ・ひらがなのまま）を覚えたときのコスト
+const LEARNED_FALLBACK_COST: i32 = 4000;
+/// これより短い文節は区切りの学習で覚えない（短い読みがほかの文で効きすぎないように）
+const MIN_LEARNED_CHARS: usize = 2;
 /// 半角数字の並び（「1000」「3.14」）を1語にしたときのコスト。Mozc の「いち → 1」（753）と同じくらいにする
 const NUMBER_COST: i32 = 700;
 /// 文節ごとに保持する途中経路の数
@@ -68,11 +74,13 @@ enum Source {
     System(u32),
     /// ユーザー辞書の語の番号
     User(u32),
+    /// 区切りの学習で覚えた語の番号
+    Learned(u32),
 }
 
 struct Lattice<'a> {
     reading: &'a str,
-    user: &'a UserDictionary,
+    user: &'a UserData,
     /// 文字位置 → バイト位置（末尾を含む）
     offsets: Vec<usize>,
     nodes: Vec<Node>,
@@ -152,7 +160,7 @@ impl Engine {
         if reading.is_empty() {
             return Conversion { segments: vec![] };
         }
-        let lat = self.build_lattice(reading, &user.dictionary);
+        let lat = self.build_lattice(reading, user, true);
         let n = lat.len();
         let mut fixed: Vec<usize> = boundaries
             .iter()
@@ -195,7 +203,8 @@ impl Engine {
         Conversion { segments }
     }
 
-    fn build_lattice<'a>(&self, reading: &'a str, user: &'a UserDictionary) -> Lattice<'a> {
+    /// `with_learned` なら区切りの学習で覚えた語も足す
+    fn build_lattice<'a>(&self, reading: &'a str, user: &'a UserData, with_learned: bool) -> Lattice<'a> {
         let offsets: Vec<usize> = reading
             .char_indices()
             .map(|(i, _)| i)
@@ -260,10 +269,11 @@ impl Engine {
                         });
                     }
                 });
-            // ユーザー辞書は登録した一番長い読みまで、長さごとに引く
-            for end in start + 1..=n.min(start + user.max_chars()) {
-                for &i in user.lookup(&reading[offsets[start]..offsets[end]]) {
-                    let id = self.dict.user_pos_id(user.word(i).pos);
+            // ユーザー辞書と区切りの学習は、それぞれ一番長い読みまで、長さごとに引く
+            let dictionary = &user.dictionary;
+            for end in start + 1..=n.min(start + dictionary.max_chars()) {
+                for &i in dictionary.lookup(&reading[offsets[start]..offsets[end]]) {
+                    let id = self.dict.user_pos_id(dictionary.word(i).pos);
                     push(Node {
                         start,
                         end,
@@ -271,6 +281,26 @@ impl Engine {
                         rid: id,
                         cost: USER_WORD_COST,
                         source: Source::User(i),
+                    });
+                }
+            }
+            let learned = &user.learned;
+            let max = if with_learned { learned.max_chars() } else { 0 };
+            let pos_count = self.dict.pos_count();
+            for end in start + 1..=n.min(start + max) {
+                for &i in learned.lookup(&reading[offsets[start]..offsets[end]]) {
+                    let w = learned.word(i);
+                    // 辞書を作り直して品詞IDの数が変わっていたら使わない
+                    if w.lid as usize >= pos_count || w.rid as usize >= pos_count {
+                        continue;
+                    }
+                    push(Node {
+                        start,
+                        end,
+                        lid: w.lid,
+                        rid: w.rid,
+                        cost: w.cost,
+                        source: Source::Learned(i),
                     });
                 }
             }
@@ -289,7 +319,8 @@ impl Engine {
         let reading = lat.slice(node.start..node.end);
         match node.source {
             Source::System(i) => self.dict.entry(i).surface.resolve(reading).into_owned(),
-            Source::User(i) => lat.user.word(i).surface.clone(),
+            Source::User(i) => lat.user.dictionary.word(i).surface.clone(),
+            Source::Learned(i) => lat.user.learned.word(i).surface.clone(),
             Source::Plain => reading.to_owned(),
         }
     }
@@ -356,32 +387,8 @@ impl Engine {
             .map(|node| self.surface(lat, node))
             .collect();
 
-        let mut beams: Vec<Vec<Partial>> = (range.start..=range.end).map(|_| Vec::new()).collect();
-        beams[0].push(Partial {
-            cost: 0,
-            rid: left,
-            surface: String::new(),
-        });
-        for p in range.start..range.end {
-            let beam = prune(std::mem::take(&mut beams[p - range.start]));
-            for &i in &lat.by_start[p] {
-                let node = &lat.nodes[i];
-                if node.end > range.end {
-                    continue;
-                }
-                let word = self.surface(lat, node);
-                for prev in &beam {
-                    beams[node.end - range.start].push(Partial {
-                        cost: prev.cost + self.dict.connection_cost(prev.rid, node.lid) + node.cost,
-                        rid: node.rid,
-                        surface: format!("{}{}", prev.surface, word),
-                    });
-                }
-            }
-        }
-        let mut finals: Vec<(i32, String)> = beams
-            .pop()
-            .unwrap()
+        let mut finals: Vec<(i32, String)> = self
+            .beam(lat, range.clone(), left)
             .into_iter()
             .map(|x| (x.cost + self.dict.connection_cost(x.rid, right), x.surface))
             .collect();
@@ -419,6 +426,114 @@ impl Engine {
             candidates,
         }
     }
+
+    /// `range` の中の単語の並びを、左の文脈 `left` から始めて上位だけ求める。コストは右の文脈とのつながりを含まない
+    fn beam(&self, lat: &Lattice, range: Range<usize>, left: u16) -> Vec<Partial> {
+        let mut beams: Vec<Vec<Partial>> = (range.start..=range.end).map(|_| Vec::new()).collect();
+        beams[0].push(Partial {
+            cost: 0,
+            rid: left,
+            lid: None,
+            surface: String::new(),
+            content_end: 0,
+        });
+        for p in range.start..range.end {
+            let beam = prune(std::mem::take(&mut beams[p - range.start]));
+            for &i in &lat.by_start[p] {
+                let node = &lat.nodes[i];
+                if node.end > range.end {
+                    continue;
+                }
+                let word = self.surface(lat, node);
+                let functional = self.dict.is_functional(node.lid);
+                for prev in &beam {
+                    let surface = format!("{}{}", prev.surface, word);
+                    beams[node.end - range.start].push(Partial {
+                        cost: prev.cost + self.dict.connection_cost(prev.rid, node.lid) + node.cost,
+                        rid: node.rid,
+                        lid: Some(prev.lid.unwrap_or(node.lid)),
+                        // 付属語は自立語の表記に含めない
+                        content_end: if functional { prev.content_end } else { surface.len() },
+                        surface,
+                    });
+                }
+            }
+        }
+        beams.pop().unwrap()
+    }
+
+    /// 文節の読みと選んだ表記から、先頭の左文脈ID・末尾の右文脈ID・内側のコスト・自立語の表記を求める。
+    /// 覚えた語が自分自身を見てコストを下げ続けないよう、区切りの学習はラティスに入れない。
+    /// 上位の並びに選んだ表記がなければ None
+    fn analyze(&self, reading: &str, surface: &str, user: &UserData) -> Option<Analysis> {
+        if reading.is_empty() {
+            return None;
+        }
+        let lat = self.build_lattice(reading, user, false);
+        let n = lat.len();
+        self.beam(&lat, 0..n, BOS_EOS)
+            .into_iter()
+            .filter(|x| x.surface == surface)
+            .min_by_key(|x| x.cost)
+            .map(|x| {
+                let lid = x.lid.unwrap_or(BOS_EOS);
+                Analysis {
+                    lid,
+                    rid: x.rid,
+                    cost: x.cost - self.dict.connection_cost(BOS_EOS, lid),
+                    content: x.surface[..x.content_end].to_owned(),
+                }
+            })
+    }
+
+    /// 確定した文節を学習する。選んだ候補を覚え、手で区切った文節を語として覚える
+    pub fn commit(&self, user: &mut UserData, segments: &[CommitSegment]) {
+        let committed: Vec<Committed> = segments
+            .iter()
+            .map(|s| Committed {
+                reading: s.reading.clone(),
+                surface: s.surface.clone(),
+                was_first: s.was_first,
+            })
+            .collect();
+        user.history.commit(&committed);
+        for s in segments {
+            if !s.manual || s.reading.chars().count() < MIN_LEARNED_CHARS {
+                continue;
+            }
+            let (lid, rid, cost) = match self.analyze(&s.reading, &s.surface, user) {
+                Some(a) => (a.lid, a.rid, a.cost - LEARNED_BONUS),
+                // カタカナやひらがなのままなど、辞書の単語の並びで作れない表記は名詞として覚える
+                None => {
+                    let id = self.dict.unknown_id();
+                    (id, id, LEARNED_FALLBACK_COST)
+                }
+            };
+            user.learned.learn(&s.reading, &s.surface, lid, rid, cost);
+        }
+    }
+}
+
+/// 確定した文節1つ分
+#[derive(Debug, Clone)]
+pub struct CommitSegment {
+    pub reading: String,
+    pub surface: String,
+    /// 第1候補のまま確定したか
+    pub was_first: bool,
+    /// 手で置いた区切り（ピン）に接しているか。区切りの学習の対象にする
+    pub manual: bool,
+}
+
+/// 文節を単語に分けた結果
+struct Analysis {
+    lid: u16,
+    rid: u16,
+    /// 単語のコストと内側のつながりのコストの合計（前後とのつながりは含まない）
+    cost: i32,
+    /// 末尾の付属語を除いた表記
+    #[allow(dead_code)]
+    content: String,
 }
 
 /// 1語にまとめる英数字の並びに入る文字か。数字に挟まれた「.」「,」も含める（「3.14」「1,000」）
@@ -435,7 +550,11 @@ fn in_ascii_run(chars: &[char], i: usize) -> bool {
 struct Partial {
     cost: i32,
     rid: u16,
+    /// 先頭の単語の左文脈ID。まだ単語がなければ None
+    lid: Option<u16>,
     surface: String,
+    /// surface のうち、末尾の付属語を除いた部分の長さ（バイト）
+    content_end: usize,
 }
 
 /// コストの低い順に並べ、同じ (右文脈, 表記) を1つにまとめて上位だけ残す
@@ -464,6 +583,7 @@ mod tests {
     fn engine() -> Engine {
         let mut b = DictionaryBuilder::new(5, 4);
         b.set_user_pos(UserPos::Noun, NOUN);
+        b.set_functional(PARTICLE, true);
         for rid in 0..5 {
             for lid in 0..5 {
                 b.set_connection(rid, lid, 1000);
@@ -559,6 +679,52 @@ mod tests {
         user.dictionary.add("ははし", "ハハシ", UserPos::Noun).unwrap();
         let c = e.convert("わたしははし", &user);
         assert_eq!(view(&c), [(0, 3, "私"), (3, 6, "ハハシ")]);
+    }
+
+    fn manual(reading: &str, surface: &str) -> CommitSegment {
+        CommitSegment {
+            reading: reading.into(),
+            surface: surface.into(),
+            was_first: false,
+            manual: true,
+        }
+    }
+
+    #[test]
+    fn learns_manual_segments() {
+        let e = engine();
+        let mut user = UserData::default();
+        let before = e.convert("わたしははしをわたる", &user);
+        assert_eq!(view(&before), [(0, 4, "私は"), (4, 7, "橋を"), (7, 10, "渡る")]);
+        // 「わたしははし」を手で1文節にして確定すると、次から1文節になりやすい
+        e.commit(&mut user, &[manual("わたしははし", "私は橋")]);
+        let after = e.convert("わたしははしをわたる", &user);
+        assert_eq!(view(&after), [(0, 7, "私は橋を"), (7, 10, "渡る")]);
+    }
+
+    #[test]
+    fn learns_only_manual_and_long_segments() {
+        let e = engine();
+        let mut user = UserData::default();
+        let mut auto = manual("わたしは", "私は");
+        auto.manual = false;
+        e.commit(&mut user, &[auto, manual("は", "歯")]);
+        assert!(user.learned.is_empty());
+    }
+
+    #[test]
+    fn relearning_does_not_lower_cost_again() {
+        let e = engine();
+        let mut user = UserData::default();
+        e.commit(&mut user, &[manual("わたしははし", "私は橋")]);
+        let cost = |u: &UserData| u.learned.word(u.learned.lookup("わたしははし")[0]).cost;
+        let first = cost(&user);
+        e.commit(&mut user, &[manual("わたしははし", "私は橋")]);
+        assert_eq!(cost(&user), first);
+        // 辞書の単語の並びで作れない表記は名詞として覚える
+        e.commit(&mut user, &[manual("わたしは", "ワタシハ")]);
+        let w = user.learned.word(user.learned.lookup("わたしは")[0]);
+        assert_eq!((w.lid, w.cost), (4, LEARNED_FALLBACK_COST));
     }
 
     #[test]

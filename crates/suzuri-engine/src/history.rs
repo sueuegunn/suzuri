@@ -30,6 +30,12 @@ impl fmt::Display for HistoryError {
 
 impl std::error::Error for HistoryError {}
 
+impl HistoryError {
+    pub(crate) fn new(msg: impl Into<String>) -> Self {
+        HistoryError(msg.into())
+    }
+}
+
 pub struct UserHistory {
     /// 読み → (表記, 最後に使った時刻)
     entries: HashMap<String, Vec<(String, u64)>>,

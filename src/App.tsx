@@ -184,6 +184,8 @@ export default function App() {
       reading: seg.reading,
       surface: seg.candidates[seg.selected],
       wasFirst: seg.selected === 0,
+      // 手で置いたピンに接する文節は、区切りの学習で覚える
+      manual: s.pinned.includes(seg.start) || s.pinned.includes(seg.end),
     }));
     const paste = modeRef.current === "paste";
     closed.then(() => engine.commit(text, segments, paste));

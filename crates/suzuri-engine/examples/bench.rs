@@ -8,7 +8,8 @@ use std::time::Instant;
 use suzuri_engine::dict::Dictionary;
 use suzuri_engine::history::DEFAULT_CAPACITY;
 use suzuri_engine::user_dict::MAX_READING_CHARS;
-use suzuri_engine::{Committed, Engine, UserData, UserHistory, UserPos};
+use suzuri_engine::learned::{DEFAULT_CAPACITY as LEARNED_CAPACITY, LearnedWords};
+use suzuri_engine::{CommitSegment, Committed, Engine, UserData, UserHistory, UserPos};
 
 /// ユーザー辞書の効き方を見る文。登録した語が効くか、ほかの語の一部の読みに割り込まないか
 const USER_WORDS: &[(&str, &str, UserPos)] = &[
@@ -86,6 +87,23 @@ fn main() {
         println!("ユーザー辞書 {s}: {} → {}", first(&empty), first(&words));
     }
 
+    // 区切りの学習の効き方。手で区切った文節を確定する前と後を並べる
+    let manual = |reading: &str, surface: &str| CommitSegment {
+        reading: reading.into(),
+        surface: surface.into(),
+        was_first: false,
+        manual: true,
+    };
+    let mut learned = UserData::default();
+    engine.commit(&mut learned, &[manual("いちぶん", "一文"), manual("だいにかいぎしつ", "第2会議室")]);
+    for s in [SENTENCES[2], SENTENCES[4], "いちぶんずつよむ", "いちぶんいっぷん"] {
+        let first = |u: &UserData| {
+            let c = engine.convert(s, u);
+            c.segments.iter().map(|seg| seg.candidates[0].clone()).collect::<Vec<_>>().join("|")
+        };
+        println!("区切りの学習 {s}: {} → {}", first(&empty), first(&learned));
+    }
+
     // 学習が上限まで溜まり、ユーザー辞書にも多く登録した状態。
     // 読みを上限の長さにした語を入れ、ラティスで引く長さが一番長くなるようにする
     let mut full = UserData {
@@ -104,12 +122,18 @@ fn main() {
         let reading: String = (0..MAX_READING_CHARS).map(|j| kana[(i * 7 + j * 13) % kana.len()]).collect();
         full.dictionary.add(&reading, &format!("語{i}"), UserPos::Noun).unwrap();
     }
+    full.learned = LearnedWords::new(LEARNED_CAPACITY);
+    for i in 0..LEARNED_CAPACITY {
+        let reading: String = (0..MAX_READING_CHARS).map(|j| kana[(i * 11 + j * 5) % kana.len()]).collect();
+        full.learned.learn(&reading, &format!("学{i}"), 1, 1, 3000);
+    }
     for s in SENTENCES {
         let t = Instant::now();
         engine.convert(s, &full);
         println!(
-            "学習 {} 件・ユーザー辞書 {} 語での変換（{}文字）: {:?}",
+            "学習 {} 件・区切りの学習 {} 件・ユーザー辞書 {} 語での変換（{}文字）: {:?}",
             full.history.len(),
+            full.learned.len(),
             full.dictionary.words().len(),
             s.chars().count(),
             t.elapsed()
@@ -118,4 +142,7 @@ fn main() {
     let t = Instant::now();
     let text = full.history.serialize();
     println!("学習の書き出し: {:?}（{} KB）", t.elapsed(), text.len() / 1024);
+    let t = Instant::now();
+    let text = full.learned.serialize();
+    println!("区切りの学習の書き出し: {:?}（{} KB）", t.elapsed(), text.len() / 1024);
 }

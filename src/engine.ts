@@ -10,7 +10,8 @@ export type Theme = "system" | "light" | "dark";
 /** オーバーレイの見た目。どちらも百分率 */
 export type Appearance = { textScale: number; opacity: number };
 
-export type Committed = { reading: string; surface: string; wasFirst: boolean };
+/** 確定した文節。manual は手で置いたピンに接するか（区切りの学習の対象） */
+export type Committed = { reading: string; surface: string; wasFirst: boolean; manual: boolean };
 
 /** ユーザー辞書の品詞。名前は Rust 側の UserPos と合わせる */
 export type UserPos = "noun" | "person" | "place" | "organization";
