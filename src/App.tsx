@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
-import { applyAppearance, engine, settings, type Appearance } from "./engine";
+import { applyAppearance, engine, settings, userDictionary, type Appearance, type UserWord } from "./engine";
 import { applyFunctionKey, isFunctionKey, type FunctionKey } from "./kana";
 import { feed, flush } from "./romaji";
 import {
@@ -35,6 +35,12 @@ const WHEEL_LINE_PX = 40;
 const PIN_DRAG_START_PX = 4;
 /** ピンの上で左ボタンを押してからこれより短く離し、ほとんど動かさなければ、クリックとみなして入力カーソルを置く */
 const PIN_CLICK_MS = 300;
+/** 下段の文節をユーザー辞書に登録したときの知らせを出しておく時間。その間は左クリックで取り消せる */
+const NOTICE_MS = 5000;
+const REGISTERED_NOTICE = "ユーザ辞書に登録しました。左クリックでキャンセルできます。";
+
+/** 区切り線の上に1行だけ出す知らせ。word があれば、左クリックでその登録を取り消す */
+type Notice = { id: number; text: string; word: UserWord | null };
 /** ドラッグ中に端を越えて反対側へ移したあと、これだけの間は次を移さない。移す前の位置のイベントが遅れて届き、戻されないようにする */
 const WRAP_COOLDOWN_MS = 100;
 /** 候補一覧に並べる数 */
@@ -129,6 +135,28 @@ export default function App() {
   /** 下段の各文節の要素。候補一覧の位置合わせに使う */
   const resultRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const resultAreaRef = useRef<HTMLDivElement>(null);
+  /** 下段で右ボタンを押した文節と、今乗っている文節（文節の番号）。離したらその範囲を辞書に登録する */
+  const [registerSel, setRegisterSelState] = useState<{ from: number; to: number } | null>(null);
+  const registerSelRef = useRef(registerSel);
+  const setRegisterSel = (r: { from: number; to: number } | null) => {
+    registerSelRef.current = r;
+    setRegisterSelState(r);
+  };
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const noticeId = useRef(0);
+
+  const showNotice = (text: string, word: UserWord | null) => {
+    const id = ++noticeId.current;
+    setNotice({ id, text, word });
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice((n) => (n?.id === id ? null : n)), NOTICE_MS);
+  };
+
+  const hideNotice = () => {
+    window.clearTimeout(noticeTimer.current);
+    setNotice(null);
+  };
 
   const update = (s: Session) => {
     sessionRef.current = s;
@@ -165,6 +193,8 @@ export default function App() {
     setListFor(null);
     setDrag(null);
     setRange(null);
+    setRegisterSel(null);
+    hideNotice();
     return afterPaint();
   };
 
@@ -903,6 +933,54 @@ export default function App() {
   const segClass = (i: number) =>
     "seg" + (i % 2 ? " odd" : "") + (listFor === i ? " active" : hover === i ? " hover" : "");
 
+  /** 下段の i〜j 番目の文節（逆順でもよい）を、今の候補のままユーザー辞書に登録する */
+  const registerSegments = async (i: number, j: number) => {
+    const segs = sessionRef.current.segments;
+    if (!segs) return;
+    const picked = segs.slice(Math.min(i, j), Math.max(i, j) + 1);
+    const reading = picked.map((s) => s.reading).join("");
+    const surface = picked.map((s) => s.candidates[s.selected]).join("");
+    try {
+      showNotice(REGISTERED_NOTICE, await userDictionary.registerSegment(reading, surface));
+    } catch (e) {
+      showNotice(String(e), null);
+    }
+  };
+
+  /** 知らせを左クリックしたら、登録を取り消して消す */
+  const onNoticeClick = (e: React.MouseEvent) => {
+    if (e.button !== 0 || (IS_MAC && e.ctrlKey)) return;
+    const word = notice?.word;
+    hideNotice();
+    if (word) userDictionary.remove(word).catch((err) => showNotice(String(err), null));
+  };
+
+  /** 下段で右ボタンを押したら、離したところまでの文節を登録する。動かさずに離したらその文節だけ */
+  const onResultRightDown = (i: number, e: React.PointerEvent) => {
+    if (!isRightButton(e) || !sessionRef.current.segments) return;
+    setRegisterSel({ from: i, to: i });
+    resultAreaRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  const onResultMove = (e: React.PointerEvent) => {
+    const r = registerSelRef.current;
+    if (!r) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-seg]");
+    if (!el || !resultAreaRef.current?.contains(el)) return;
+    const to = Number(el.dataset.seg);
+    if (to !== r.to) setRegisterSel({ ...r, to });
+  };
+
+  const onResultUp = () => {
+    const r = registerSelRef.current;
+    if (!r) return;
+    setRegisterSel(null);
+    registerSegments(r.from, r.to);
+  };
+
+  const registering = (i: number) =>
+    registerSel !== null && Math.min(registerSel.from, registerSel.to) <= i && i <= Math.max(registerSel.from, registerSel.to);
+
   /** 上段・下段の文節に共通のマウス操作 */
   const segHandlers = (i: number) => ({
     onWheel: (e: React.WheelEvent) => onWheel(i, e),
@@ -980,14 +1058,33 @@ export default function App() {
           </div>
           {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
         </div>
-        <div className="area result-area" ref={resultAreaRef}>
+        {notice && (
+          <div className="notice-anchor">
+            <div className="notice" key={notice.id} onClick={onNoticeClick} title={notice.word ? "クリックで登録を取り消す" : undefined}>
+              <svg className="notice-timer" viewBox="0 0 20 20" aria-hidden="true">
+                <circle className="notice-timer-track" cx="10" cy="10" r="9" />
+                <circle className="notice-timer-pie" cx="10" cy="10" r="4.5" />
+              </svg>
+              <span>{notice.text}</span>
+            </div>
+          </div>
+        )}
+        <div
+          className="area result-area"
+          ref={resultAreaRef}
+          onPointerMove={onResultMove}
+          onPointerUp={onResultUp}
+          onPointerCancel={() => setRegisterSel(null)}
+        >
           {segments?.map((seg, i) => (
             <span
               key={`${seg.start}:${seg.end}`}
-              className={segClass(i)}
+              className={segClass(i) + (registering(i) ? " register-select" : "")}
+              data-seg={i}
               ref={(el) => {
                 resultRefs.current[i] = el;
               }}
+              onPointerDown={(e) => onResultRightDown(i, e)}
               {...segHandlers(i)}
             >
               {seg.candidates[seg.selected]}

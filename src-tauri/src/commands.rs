@@ -232,6 +232,20 @@ pub fn add_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result<Ve
     Ok(user_words(&user.dictionary))
 }
 
+/// オーバーレイの下段の文節（いくつかをつないだものでもよい）を、名詞としてユーザー辞書に登録する。
+/// 末尾の助詞・助動詞は除く（「スズリで」は「スズリ」）。登録した語を返し、取り消すときに remove_user_word へ渡す
+#[tauri::command]
+pub fn register_segment(state: State<'_, AppState>, reading: String, surface: String) -> Result<UserWordDto, String> {
+    let mut user = state.user.lock().unwrap();
+    let (reading, surface) = state.engine.content_word(&reading, &surface, &user);
+    let word = user
+        .dictionary
+        .add(&reading, &surface, UserPos::Noun)
+        .map_err(|e| e.to_string())?;
+    state.saver.request_dictionary();
+    Ok(UserWordDto::from(&word))
+}
+
 /// 語を消し、消したあとの一覧を返す
 #[tauri::command]
 pub fn remove_user_word(state: State<'_, AppState>, word: UserWordDto) -> Result<Vec<UserWordDto>, String> {

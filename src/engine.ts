@@ -24,6 +24,8 @@ export const userDictionary = {
   /** 読みや表記が正しくなければ、画面に出す理由で失敗する */
   add: (word: UserWord) => invoke<UserWord[]>("add_user_word", { word }),
   remove: (word: UserWord) => invoke<UserWord[]>("remove_user_word", { word }),
+  /** オーバーレイの下段の文節を名詞として登録する。末尾の助詞は除く。登録した語を返す */
+  registerSegment: (reading: string, surface: string) => invoke<UserWord>("register_segment", { reading, surface }),
 };
 
 export const engine = {

@@ -274,6 +274,7 @@ fn main() {
             commands::list_user_words,
             commands::add_user_word,
             commands::remove_user_word,
+            commands::register_segment,
             commands::center_overlay,
             commands::read_clipboard,
         ])

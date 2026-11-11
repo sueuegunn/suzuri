@@ -613,3 +613,71 @@ body.settings-body {
   margin: 12px 0;
   text-align: center;
 }
+
+/* 下段で右ドラッグして、ユーザー辞書に登録しようとしている文節 */
+.seg.register-select {
+  background: var(--active);
+}
+
+/* ユーザー辞書に登録したときの知らせ。上下の区切り線に重ね、常に1行だけ出す */
+.notice-anchor {
+  position: relative;
+  height: 0;
+  z-index: 2;
+}
+
+.notice {
+  position: absolute;
+  left: 50%;
+  /* 下段の上の余白（12px）と区切り線（2px）の真ん中 */
+  top: 13px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  padding: 4px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--fg);
+  background: var(--popover);
+  border: 1px solid var(--popover-border);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px var(--shadow);
+  cursor: pointer;
+}
+
+.notice span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 5秒かけて欠けていく円。太い線で塗りつぶした円を、線の長さを減らして欠けさせる */
+.notice-timer {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+}
+
+.notice-timer-track {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.notice-timer-pie {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 9;
+  /* 2π × 4.5 */
+  stroke-dasharray: 28.28;
+  stroke-dashoffset: 0;
+  animation: notice-timer 5s linear forwards;
+}
+
+@keyframes notice-timer {
+  to {
+    stroke-dashoffset: 28.28;
+  }
+}

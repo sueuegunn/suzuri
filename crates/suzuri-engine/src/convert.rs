@@ -472,6 +472,7 @@ impl Engine {
             lid: None,
             surface: String::new(),
             content_end: 0,
+            content_pos: range.start,
         });
         for p in range.start..range.end {
             let beam = prune(std::mem::take(&mut beams[p - range.start]));
@@ -490,6 +491,7 @@ impl Engine {
                         lid: Some(prev.lid.unwrap_or(node.lid)),
                         // 付属語は自立語の表記に含めない
                         content_end: if functional { prev.content_end } else { surface.len() },
+                        content_pos: if functional { prev.content_pos } else { node.end },
                         surface,
                     });
                 }
@@ -518,8 +520,21 @@ impl Engine {
                     rid: x.rid,
                     cost: x.cost - self.dict.connection_cost(BOS_EOS, lid),
                     content: x.surface[..x.content_end].to_owned(),
+                    content_pos: x.content_pos,
                 }
             })
+    }
+
+    /// 文節（いくつかの文節をつないだものでもよい）の読みと表記から、末尾の付属語を除いた読みと表記を返す。
+    /// ユーザー辞書に登録するときに使う。分けられなければ、そのまま返す
+    pub fn content_word(&self, reading: &str, surface: &str, user: &UserData) -> (String, String) {
+        match self.analyze(reading, surface, user) {
+            Some(a) if a.content_pos > 0 && !a.content.is_empty() => {
+                let reading: String = reading.chars().take(a.content_pos).collect();
+                (reading, a.content)
+            }
+            _ => (reading.to_owned(), surface.to_owned()),
+        }
     }
 
     /// 確定した文節を学習する。選んだ候補を覚え（文脈なしと文脈つき）、手で区切った文節を語として覚える
@@ -604,6 +619,8 @@ struct Analysis {
     cost: i32,
     /// 末尾の付属語を除いた表記
     content: String,
+    /// 末尾の付属語を除いた部分が読みのどこで終わるか（文字位置）
+    content_pos: usize,
 }
 
 /// 1語にまとめる英数字の並びに入る文字か。数字に挟まれた「.」「,」も含める（「3.14」「1,000」）
@@ -625,6 +642,8 @@ struct Partial {
     surface: String,
     /// surface のうち、末尾の付属語を除いた部分の長さ（バイト）
     content_end: usize,
+    /// 末尾の付属語を除いた部分が読みのどこで終わるか（文字位置）
+    content_pos: usize,
 }
 
 /// コストの低い順に並べ、同じ (右文脈, 表記) を1つにまとめて上位だけ残す
@@ -800,6 +819,17 @@ mod tests {
         // 「私は」のあと（自立語「私」）では「箸」
         let c = e.convert_with_boundaries("わたしははし", &[4], &user);
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 6, "箸")]);
+    }
+
+    #[test]
+    fn strips_trailing_particles_for_registration() {
+        let e = engine();
+        let user = UserData::default();
+        let w = |r: &str, s: &str| e.content_word(r, s, &user);
+        assert_eq!(w("わたしは", "私は"), ("わたし".into(), "私".into()));
+        assert_eq!(w("はし", "橋"), ("はし".into(), "橋".into()));
+        // 辞書の単語の並びで作れない表記はそのまま
+        assert_eq!(w("わたしは", "ワタシハ"), ("わたしは".into(), "ワタシハ".into()));
     }
 
     #[test]
