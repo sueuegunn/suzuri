@@ -165,8 +165,8 @@ export default function App() {
     return afterPaint();
   };
 
-  const cancel = () => {
-    close().then(() => engine.cancel());
+  const cancel = (returnFocus: boolean) => {
+    close().then(() => engine.cancel(returnFocus));
   };
 
   const commit = () => {
@@ -174,7 +174,7 @@ export default function App() {
     const text = resultText(s);
     const closed = close();
     if (text === "") {
-      closed.then(() => engine.cancel());
+      closed.then(() => engine.cancel(true));
       return;
     }
     const segments = (s.segments ?? []).map((seg) => ({
@@ -714,7 +714,7 @@ export default function App() {
       }
       switch (e.key) {
         case "Escape":
-          h.cancel();
+          h.cancel(true);
           break;
         case "Enter":
           // Shift+Enter は改行を入れる。Enter だけなら確定する
@@ -778,9 +778,9 @@ export default function App() {
       getCurrentWindow()
         .isFocused()
         .then((focused) => {
-          if (!focused) handlers.current.cancel();
+          if (!focused) handlers.current.cancel(false);
         })
-        .catch(() => handlers.current.cancel());
+        .catch(() => handlers.current.cancel(false));
     };
     const noMenu = (e: MouseEvent) => e.preventDefault();
     // macOS では Cmd+V が「編集」メニューの「ペースト」に取られ、キーの処理に届かないことがある。

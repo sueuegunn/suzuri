@@ -23,7 +23,8 @@ export const engine = {
     invoke<EngineSegment[]>("resegment_ranges", { reading, boundaries, ranges }),
   commit: (text: string, segments: Committed[], paste: boolean) =>
     invoke<void>("commit", { text, segments, paste }),
-  cancel: () => invoke<void>("cancel"),
+  /** 閉じる。returnFocus なら呼び出し元にフォーカスを戻す（Esc のとき。枠外クリックではクリックした先に任せる） */
+  cancel: (returnFocus: boolean) => invoke<void>("cancel", { returnFocus }),
   /** オーバーレイを今いるモニターの中央に戻す */
   center: () => invoke<void>("center_overlay"),
   /** クリップボードの文字。文字でなければ空 */

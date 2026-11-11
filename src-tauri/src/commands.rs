@@ -142,8 +142,14 @@ pub fn commit(
     Ok(())
 }
 
+/// 閉じる。return_focus なら呼び出し元にフォーカスを戻す。
+/// macOS はウィンドウを隠すだけではスズリが前面に残り、元のアプリに戻らないことがある
 #[tauri::command]
-pub fn cancel(app: AppHandle) {
+pub fn cancel(app: AppHandle, state: State<'_, AppState>, return_focus: bool) {
+    // 戻すのは貼り付けと同じく、オーバーレイがまだ前面にあるうちに行う
+    if let Some(caller) = state.caller.lock().unwrap().take().filter(|_| return_focus) {
+        platform::return_focus(&app, caller);
+    }
     overlay::hide(&app);
 }
 
