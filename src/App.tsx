@@ -1583,30 +1583,44 @@ const RESIZE_EDGES: { dir: ResizeDirection; className: string }[] = [
  */
 /** パネルの角の丸みの半径（styles.css の .panel の border-radius） */
 const PANEL_RADIUS = 28;
-/** 角の印の扇の半径。角の点を中心にする。対角線の上で、パネルの縁から内側へ 17 − 28(√2 − 1) ≒ 5px 太る */
-const CORNER_FAN = 17;
+/** パネルの縁の線の太さ（styles.css の .panel の border） */
+const PANEL_BORDER = 2;
+/** 角の印の太さ。パネルの外側の輪郭から内側へ */
+const CORNER_THICKNESS = 5;
 
 /**
  * 大きさを変える角の印（左上の形。ほかの角は CSS で裏返す）。外側の輪郭はパネルの丸みのまま、内側にだけ太らせる。
- * 内側の輪郭は、上の辺から 60° で内へ入り、角の点を中心にした扇の弧（30°〜60°）を通って、30° で左の辺へ戻る。
- * パネルの丸みで切り抜くので、外側には出ない
+ * 内側の輪郭は、縁の線から 60° で内へ入り、角の丸みと同じ中心で外へ膨らむ扇の弧（中心から見て 60°〜30° の間）を通って、
+ * 30° でもう一方の縁の線へ戻る（右上の形で、辺に対する角度）。パネルの丸みで切り抜くので、外側には出ない
  */
 function CornerMark({ id }: { id: string }) {
-  const r = CORNER_FAN;
-  const at = (deg: number) => [r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180)];
-  const [t1x, t1y] = at(30);
-  const [t2x, t2y] = at(60);
-  // 扇の端の接線（60°・30°）を辺まで延ばした点。辺から入る点は角の点から r / cos 30° 離れる
-  const edge = r / Math.cos(Math.PI / 6);
+  const R = PANEL_RADIUS;
+  const r = R - CORNER_THICKNESS;
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  // 角の丸みの中心から見て deg の方向（90° が上の辺、0° が左の辺）で、中心から dist の点
+  const at = (deg: number, dist: number): [number, number] => [R - dist * Math.cos(rad(deg)), R - dist * Math.sin(rad(deg))];
+  const a1 = at(60, r);
+  // 弧の上の端から、上の辺の側へ 60° の向きに戻り、縁の線の内側（中心から R − 縁の太さ）に着く点
+  const [dx, dy] = [Math.cos(rad(60)), -Math.sin(rad(60))];
+  const [px, py] = [a1[0] - R, a1[1] - R];
+  const inner = R - PANEL_BORDER;
+  const b = px * dx + py * dy;
+  const t = -b + Math.sqrt(b * b - (px * px + py * py - inner * inner));
+  const e1: [number, number] = [a1[0] + t * dx, a1[1] + t * dy];
+  // 左の辺の側は、対角線で折り返した形
+  const a2: [number, number] = [a1[1], a1[0]];
+  const e2: [number, number] = [e1[1], e1[0]];
+  const f = (p: [number, number]) => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`;
   const clip = `corner-clip-${id}`;
   return (
-    <svg className="corner-mark" viewBox={`0 0 ${PANEL_RADIUS} ${PANEL_RADIUS}`} aria-hidden="true">
+    <svg className="corner-mark" viewBox={`0 0 ${R} ${R}`} aria-hidden="true">
       <clipPath id={clip}>
-        <rect width={PANEL_RADIUS * 2} height={PANEL_RADIUS * 2} rx={PANEL_RADIUS} />
+        <rect width={R * 2} height={R * 2} rx={R} />
       </clipPath>
       <path
         clipPath={`url(#${clip})`}
-        d={`M${edge} 0 L${t1x} ${t1y} A${r} ${r} 0 0 1 ${t2x} ${t2y} L0 ${edge} L0 0 Z`}
+        // 内側の輪郭を描いてから、パネルの外（切り抜かれる）を回って閉じる
+        d={`M${f(e1)} L${f(a1)} A${r} ${r} 0 0 0 ${f(a2)} L${f(e2)} L0 ${e2[1].toFixed(2)} L0 0 L${e1[0].toFixed(2)} 0 Z`}
       />
     </svg>
   );

@@ -27,7 +27,7 @@
   /* 文節の区切りのピン。入力カーソルの青と見分けられ、暗い背景でも沈まないオレンジ */
   --pin: #e08300;
   /* パネルの縁の線と、大きさを変える掴みどころの印。明るい背景では暗いグレー */
-  --panel-border: #6e6e73;
+  --panel-border: #48484a;
   /* 英数字は読みやすい Verdana（Windows・macOS とも標準）。Verdana にない日本語は、
      仮名も漢字も同じ幅の正方形に収まる等幅の書体で出す。
      BIZ UDゴシックは Windows 10 以降に標準で入っている。macOS は Osaka−等幅 */
@@ -51,7 +51,7 @@
   --shadow: rgba(0, 0, 0, 0.5);
   --pin: #ff9f0a;
   /* 暗い背景では明るいグレー */
-  --panel-border: #aeaeb2;
+  --panel-border: #c7c7cc;
   --grabber: #636366;
   --hint: #aeaeb2;
   --window-bg: #1c1c1e;
@@ -98,7 +98,7 @@ body {
   flex-direction: column;
   padding: 28px 32px 18px;
   background: var(--bg);
-  border: 1px solid var(--panel-border);
+  border: 2px solid var(--panel-border);
   border-radius: 28px;
 }
 
