@@ -409,8 +409,8 @@ body {
 }
 
 /* 大きさを変える掴みどころ。外の余白（8px）とパネルの縁の内側 10px にまたがる。
-   縁の上に印を描く。角は幅と高さの両方を変えられるので、いつも内側に太らせた印（.corner-mark）を出す。
-   辺は幅か高さの一方だけなので、マウスを乗せたときだけ辺に沿って太い線を出す。乗せた掴みどころは青にする */
+   辺（幅か高さの一方だけを変える）には、マウスを乗せたときだけ辺に沿って内側に青い太い線を出す（::after）。
+   角（幅と高さの両方）には印を出さない */
 .resize {
   position: absolute;
   z-index: 2;
@@ -495,24 +495,6 @@ body {
   opacity: 1;
 }
 
-/* 角の印（App.tsx の CornerMark）。パネルの角に置き、外側の輪郭はパネルの丸みのまま、内側にだけ太らせる。
-   左上の形を描き、ほかの角は裏返して使う */
-.corner-mark {
-  position: absolute;
-  width: 28px;
-  height: 28px;
-  overflow: visible;
-  pointer-events: none;
-  fill: var(--panel-border);
-}
-.resize.nw .corner-mark { top: 8px; left: 8px; }
-.resize.ne .corner-mark { top: 8px; right: 8px; transform: scaleX(-1); }
-.resize.sw .corner-mark { bottom: 8px; left: 8px; transform: scaleY(-1); }
-.resize.se .corner-mark { bottom: 8px; right: 8px; transform: scale(-1, -1); }
-
-.resize:hover .corner-mark {
-  fill: var(--accent);
-}
 
 .footer {
   display: flex;
