@@ -1222,14 +1222,14 @@ export default function App() {
                             if (e.button === 0) bake(i);
                           }}
                         >
-                          {i === segments.length - 1 && ghost?.replace ? (
-                            <span className="suggestion">{ghost.surface}</span>
+                          {ghost?.hideFrom != null && i >= ghost.hideFrom ? (
+                            i === segments.length - 1 && <span className="suggestion">{ghost.replace}</span>
                           ) : (
                             seg.candidates[seg.selected]
                           )}
                           {i === segments.length - 1 && ghost && (
                             <>
-                              {!ghost.replace && <span className="suggestion">{ghost.surfaceRest}</span>}
+                              {ghost.rest && <span className="suggestion">{ghost.rest}</span>}
                               <span className="suggestion-key">Tab</span>
                             </>
                           )}
@@ -1390,21 +1390,23 @@ function visibleSuggestion(s: Session, sg: SuggestionFor | null): SuggestionFor 
 
 /**
  * 打っている語の続きを、最後の文節の候補の行に薄く出す内容。ひらがなの行には出さない（Tab で採ったら両方に足す）。
- * 語の表記が今の候補で始まり、続きの語が最後の文節の先頭から始まるときは足す部分（surfaceRest）だけを、
- * そうでなければ語の表記で今の候補を置き換えて（replace）出す
+ * 続きの語は、打っている途中で割れて（「アニメ｜ー」）いくつかの文節にかかることがある。かかる文節の今の候補を
+ * つないだもの（「アニメー」）で語の表記が始まれば、足す部分（「ション」）だけを最後の文節の後ろに出す（rest）。
+ * そうでなければ、かかる文節の候補を隠し（hideFrom 番目以降）、語の表記を最後の文節に出す（replace）
  */
 function suggestionGhost(s: Session, sg: SuggestionFor | null) {
   const shown = visibleSuggestion(s, sg);
-  const last = s.segments?.[s.segments.length - 1];
-  if (!shown || !last) return null;
-  const candidate = last.candidates[last.selected];
-  const fromLast = length(s.kana) - shown.matched === last.start;
-  const extends_ = fromLast && shown.surface.startsWith(candidate);
-  return {
-    surface: shown.surface,
-    surfaceRest: extends_ ? shown.surface.slice(candidate.length) : shown.surface,
-    replace: fromLast && !extends_,
-  };
+  const segs = s.segments;
+  if (!shown || !segs) return null;
+  const start = length(s.kana) - shown.matched;
+  const from = segs.findIndex((seg) => seg.start === start);
+  if (from < 0) return null;
+  const typed = segs
+    .slice(from)
+    .map((seg) => seg.candidates[seg.selected])
+    .join("");
+  if (shown.surface.startsWith(typed)) return { rest: shown.surface.slice(typed.length), replace: null, hideFrom: null };
+  return { rest: null, replace: shown.surface, hideFrom: from };
 }
 
 /** 改行だけの文節か。改行は空白と同じく、それだけで1文節になる */
