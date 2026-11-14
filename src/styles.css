@@ -409,7 +409,7 @@ body {
 }
 
 /* 大きさを変える掴みどころ。外の余白（8px）とパネルの縁の内側 10px にまたがる。
-   縁の上に印を描く（::after）。角は幅と高さの両方を変えられるので、いつも太い弧を出す。
+   縁の上に印を描く。角は幅と高さの両方を変えられるので、いつも内側に太らせた印（.corner-mark）を出す。
    辺は幅か高さの一方だけなので、マウスを乗せたときだけ辺に沿って太い線を出す。乗せた掴みどころは青にする */
 .resize {
   position: absolute;
@@ -460,15 +460,15 @@ body {
   pointer-events: none;
 }
 
-/* 辺の印。パネルの縁（外から 8px）に重ね、角の弧とは重ならないようにする */
+/* 辺の印。パネルの縁（外から 8px）から内側にだけ描き、外側の輪郭は滑らかなままにする */
 .resize.n::after,
 .resize.s::after {
   left: 8px;
   right: 8px;
   height: 3px;
 }
-.resize.n::after { top: 7px; }
-.resize.s::after { bottom: 7px; }
+.resize.n::after { top: 8px; }
+.resize.s::after { bottom: 8px; }
 
 .resize.w::after,
 .resize.e::after {
@@ -476,8 +476,8 @@ body {
   bottom: 8px;
   width: 3px;
 }
-.resize.w::after { left: 7px; }
-.resize.e::after { right: 7px; }
+.resize.w::after { left: 8px; }
+.resize.e::after { right: 8px; }
 
 .resize.n::after,
 .resize.s::after,
@@ -495,25 +495,23 @@ body {
   opacity: 1;
 }
 
-/* 角の印。パネルの角の丸み（半径 28px）に沿った太い弧 */
-.resize.nw::after,
-.resize.ne::after,
-.resize.sw::after,
-.resize.se::after {
-  width: 30px;
-  height: 30px;
-  border: 0 solid var(--panel-border);
+/* 角の印（App.tsx の CornerMark）。パネルの角に置き、外側の輪郭はパネルの丸みのまま、内側にだけ太らせる。
+   左上の形を描き、ほかの角は裏返して使う */
+.corner-mark {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+  pointer-events: none;
+  fill: var(--panel-border);
 }
-.resize.nw::after { top: 7px; left: 7px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 30px; }
-.resize.ne::after { top: 7px; right: 7px; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 30px; }
-.resize.sw::after { bottom: 7px; left: 7px; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 30px; }
-.resize.se::after { bottom: 7px; right: 7px; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 30px; }
+.resize.nw .corner-mark { top: 8px; left: 8px; }
+.resize.ne .corner-mark { top: 8px; right: 8px; transform: scaleX(-1); }
+.resize.sw .corner-mark { bottom: 8px; left: 8px; transform: scaleY(-1); }
+.resize.se .corner-mark { bottom: 8px; right: 8px; transform: scale(-1, -1); }
 
-.resize.nw:hover::after,
-.resize.ne:hover::after,
-.resize.sw:hover::after,
-.resize.se:hover::after {
-  border-color: var(--accent);
+.resize:hover .corner-mark {
+  fill: var(--accent);
 }
 
 .footer {

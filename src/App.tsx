@@ -1581,6 +1581,37 @@ const RESIZE_EDGES: { dir: ResizeDirection; className: string }[] = [
  * パネルの外の透明な余白と、パネルの縁の内側にまたがって置き、見た目の縁より少し外を押しても掴めるようにする。
  * 角にはいつも太い弧を、辺にはマウスを乗せたときに太い線を出す（styles.css の .resize::after）
  */
+/** パネルの角の丸みの半径（styles.css の .panel の border-radius） */
+const PANEL_RADIUS = 28;
+/** 角の印の扇の半径。角の点を中心にする。対角線の上で、パネルの縁から内側へ 17 − 28(√2 − 1) ≒ 5px 太る */
+const CORNER_FAN = 17;
+
+/**
+ * 大きさを変える角の印（左上の形。ほかの角は CSS で裏返す）。外側の輪郭はパネルの丸みのまま、内側にだけ太らせる。
+ * 内側の輪郭は、上の辺から 60° で内へ入り、角の点を中心にした扇の弧（30°〜60°）を通って、30° で左の辺へ戻る。
+ * パネルの丸みで切り抜くので、外側には出ない
+ */
+function CornerMark({ id }: { id: string }) {
+  const r = CORNER_FAN;
+  const at = (deg: number) => [r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180)];
+  const [t1x, t1y] = at(30);
+  const [t2x, t2y] = at(60);
+  // 扇の端の接線（60°・30°）を辺まで延ばした点。辺から入る点は角の点から r / cos 30° 離れる
+  const edge = r / Math.cos(Math.PI / 6);
+  const clip = `corner-clip-${id}`;
+  return (
+    <svg className="corner-mark" viewBox={`0 0 ${PANEL_RADIUS} ${PANEL_RADIUS}`} aria-hidden="true">
+      <clipPath id={clip}>
+        <rect width={PANEL_RADIUS * 2} height={PANEL_RADIUS * 2} rx={PANEL_RADIUS} />
+      </clipPath>
+      <path
+        clipPath={`url(#${clip})`}
+        d={`M${edge} 0 L${t1x} ${t1y} A${r} ${r} 0 0 1 ${t2x} ${t2y} L0 ${edge} L0 0 Z`}
+      />
+    </svg>
+  );
+}
+
 function ResizeHandles() {
   return (
     <>
@@ -1594,7 +1625,9 @@ function ResizeHandles() {
             e.stopPropagation();
             startResize(e, dir);
           }}
-        />
+        >
+          {className.length === 2 && <CornerMark id={className} />}
+        </div>
       ))}
     </>
   );
