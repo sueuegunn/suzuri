@@ -81,14 +81,17 @@ type Summon = {
 
 const IS_MAC = navigator.userAgent.includes("Mac");
 
-/** 次の描画が終わるのを待つ。描画が止まっているときに待ち続けないよう、長くても 50ms で打ち切る */
-function afterPaint(): Promise<void> {
+/**
+ * 次の描画が終わるのを待つ。描画が止まっているときに待ち続けないよう、長くても 50ms で打ち切る。
+ * 描画の通知（rAF）で抜けたら "raf"、打ち切ったら "timeout" を返す
+ */
+function afterPaint(): Promise<"raf" | "timeout"> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, 50);
+    const timer = setTimeout(() => resolve("timeout"), 50);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         clearTimeout(timer);
-        resolve();
+        resolve("raf");
       }),
     );
   });
@@ -110,6 +113,13 @@ export default function App() {
   const requestRef = useRef(0);
   /** 閉じてから次に呼び出されるまでの間か */
   const closedRef = useRef(false);
+  /**
+   * パネルを見せるか。閉じるときは隠す前に消してウィンドウを丸ごと透明にし、出すときは描き終えてから見せる。
+   * 隠した WebView は描き直さず、次に出した瞬間に最後の絵が、移す前の位置（前のディスプレイ）に見えることがあるため
+   */
+  const [shown, setShown] = useState(true);
+  /** 呼び出しの回数。パネルを見せる前に閉じられたり呼び出し直されたりしたら見せない */
+  const summonRef = useRef(0);
   const [listFor, setListFor] = useState<number | null>(null);
   const wheel = useRef({ acc: 0, index: -1, at: 0 });
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -221,7 +231,9 @@ export default function App() {
     setRange(null);
     setRegisterSel(null);
     hideNotice();
-    return afterPaint();
+    setShown(false);
+    // 消し終えてから隠せたかを確かめるため、描画の通知で抜けたか打ち切ったかを残す（macOS の調査用）
+    return afterPaint().then((how) => engine.debugLog(`close: ${how}`));
   };
 
   const cancel = (returnFocus: boolean) => {
@@ -804,6 +816,14 @@ export default function App() {
   useEffect(() => {
     const unlisten = listen<Summon>("summon", (e) => {
       closedRef.current = false;
+      const id = ++summonRef.current;
+      setShown(false);
+      // 新しい状態を描き、ウィンドウの移動が反映されるまでもう1フレーム待ってから見せる
+      afterPaint().then((how) => {
+        if (id !== summonRef.current || closedRef.current) return;
+        setShown(true);
+        engine.debugLog(`show: ${how}`);
+      });
       update(e.payload.mode === "previous" ? previousRef.current : emptySession);
       inputModeRef.current = e.payload.input;
       setInputModeState(e.payload.input);
@@ -813,6 +833,8 @@ export default function App() {
       setHover(null);
       window.focus();
     });
+    // Alt+F4 などで閉じられたら、Esc と同じく閉じる
+    const unlistenClose = listen("close-requested", () => handlers.current.cancel(true));
     // macOS の英数・かなキーは入力メソッドが先に取ってしまうので、Rust 側で受け取ってイベントで届く
     const unlistenLang = listen<InputMode>("lang-key", (e) => handlers.current.setInputMode(e.payload));
     const onKey = (e: KeyboardEvent) => {
@@ -944,6 +966,7 @@ export default function App() {
     return () => {
       unlisten.then((f) => f());
       unlistenLang.then((f) => f());
+      unlistenClose.then((f) => f());
       panel.removeEventListener("wheel", noWheelScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlur);
@@ -1049,7 +1072,7 @@ export default function App() {
 
   const segments = session.segments;
   return (
-    <div className="frame">
+    <div className={"frame" + (shown ? "" : " concealed")}>
       <ResizeHandles />
       {/* 上の縁の掴みどころより手前に出すため、パネルの外に置く */}
       <div className="top-bar">

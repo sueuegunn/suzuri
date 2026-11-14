@@ -242,10 +242,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // オーバーレイは Alt+F4 などで閉じられても、隠すだけにして使い回す
+            // オーバーレイは Alt+F4 などで閉じられても、隠すだけにして使い回す。Esc と同じく画面側で
+            // パネルを消してから隠させる（そのまま隠すと、次に出したときに前の内容が一瞬見える）
             tauri::WindowEvent::CloseRequested { api, .. } if window.label() != SETTINGS_LABEL => {
                 api.prevent_close();
-                let _ = window.hide();
+                let _ = window.emit("close-requested", ());
             }
             // キーの記録中に設定ウィンドウを閉じても、ショートカットが外れたままにならないようにする
             tauri::WindowEvent::Destroyed if window.label() == SETTINGS_LABEL => {
@@ -277,6 +278,7 @@ fn main() {
             commands::remove_user_word,
             commands::register_segment,
             commands::center_overlay,
+            commands::debug_log,
             commands::read_clipboard,
         ])
         .run(tauri::generate_context!())

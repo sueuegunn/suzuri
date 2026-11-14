@@ -43,6 +43,8 @@ export const engine = {
     invoke<void>("commit", { text, segments, paste }),
   /** 閉じる。returnFocus なら呼び出し元にフォーカスを戻す（Esc のとき。枠外クリックではクリックした先に任せる） */
   cancel: (returnFocus: boolean) => invoke<void>("cancel", { returnFocus }),
+  /** 調べるためのログを Rust の標準エラーに出す（tauri dev のターミナルに出る） */
+  debugLog: (message: string) => invoke<void>("debug_log", { message }).catch(() => {}),
   /** オーバーレイを今いるモニターの中央に戻す */
   center: () => invoke<void>("center_overlay"),
   /** クリップボードの文字。文字でなければ空 */
