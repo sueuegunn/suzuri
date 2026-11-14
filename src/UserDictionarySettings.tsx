@@ -92,7 +92,7 @@ export default function UserDictionarySettings() {
         }}
       >
         <input
-          placeholder="読み（ひらがな・英数字）"
+          placeholder="読み（ひらがな・英数字・記号）"
           value={reading}
           onChange={(e) => setReading(e.target.value)}
           aria-label="読み"

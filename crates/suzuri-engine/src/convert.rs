@@ -13,6 +13,7 @@ use crate::context::ContextKind;
 use crate::dict::Dictionary;
 use crate::history::Committed;
 use crate::kana::{ascii_variants, hiragana_to_katakana, symbol_variants};
+use crate::user_dict::fold_char;
 
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
 const UNKNOWN_COST: i32 = 20_000;
@@ -221,8 +222,10 @@ impl Engine {
         let mut by_end = vec![Vec::new(); n + 1];
         let unknown = self.dict.unknown_id();
         let chars: Vec<char> = reading.chars().collect();
-        // ユーザー辞書は英字の大文字・小文字を区別せずに引く。ASCII だけ小文字にするのでバイト位置は変わらない
-        let folded = reading.to_ascii_lowercase();
+        // ユーザー辞書は英字の大文字・小文字や記号の書き方をそろえて引く。1文字ずつ置き換えるので文字位置は同じだが、
+        // バイト位置は変わるので別に持つ
+        let folded: String = chars.iter().map(|&c| fold_char(c)).collect();
+        let folded_offsets: Vec<usize> = folded.char_indices().map(|(i, _)| i).chain([folded.len()]).collect();
         for start in 0..n {
             let mut push = |node: Node| {
                 by_start[node.start].push(nodes.len());
@@ -279,7 +282,7 @@ impl Engine {
             // ユーザー辞書と区切りの学習は、それぞれ一番長い読みまで、長さごとに引く
             let dictionary = &user.dictionary;
             for end in start + 1..=n.min(start + dictionary.max_chars()) {
-                for &i in dictionary.lookup(&folded[offsets[start]..offsets[end]]) {
+                for &i in dictionary.lookup_folded(&folded[folded_offsets[start]..folded_offsets[end]]) {
                     let id = self.dict.user_pos_id(dictionary.word(i).pos);
                     push(Node {
                         start,
@@ -770,6 +773,19 @@ mod tests {
         // Shift で打った大文字の読みでも引く
         let c = e.convert_with_boundaries("NPM", &[], &user);
         assert_eq!(c.segments[0].candidates[0], "エヌピーエム");
+    }
+
+    #[test]
+    fn user_word_with_symbols() {
+        let e = engine();
+        let mut user = UserData::default();
+        user.dictionary.add("c++", "C++", UserPos::Noun).unwrap();
+        let c = e.convert_with_boundaries("C++", &[], &user);
+        assert_eq!(c.segments[0].candidates[0], "C++");
+        user.dictionary.add("[はし]", "【箸】", UserPos::Noun).unwrap();
+        // かなモードで打つと「[」「]」は「「」「」」になる
+        let c = e.convert_with_boundaries("「はし」", &[], &user);
+        assert_eq!(c.segments[0].candidates[0], "【箸】");
     }
 
     #[test]

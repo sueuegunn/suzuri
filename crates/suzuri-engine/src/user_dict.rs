@@ -2,7 +2,6 @@
 //!
 //! 変換中は読みで引くハッシュ表だけを見る。ファイルの読み書きは呼び出し側が変換の外で行う。
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -105,15 +104,14 @@ impl UserDictionary {
         self.max_chars
     }
 
-    /// 読みが完全に一致する語の番号。英字の大文字・小文字は区別しない（「npm」で登録した語を Shift で打った「NPM」でも引く）。
-    /// 小文字にそろえた読みを渡せば、文字列を作り直さない
+    /// 読みが完全に一致する語の番号。英字の大文字・小文字や記号の書き方の違いは区別しない（`fold_char`）
     pub fn lookup(&self, reading: &str) -> &[u32] {
-        let key = if reading.bytes().any(|b| b.is_ascii_uppercase()) {
-            Cow::Owned(reading.to_ascii_lowercase())
-        } else {
-            Cow::Borrowed(reading)
-        };
-        self.by_reading.get(key.as_ref()).map_or(&[], Vec::as_slice)
+        self.lookup_folded(&reading.chars().map(fold_char).collect::<String>())
+    }
+
+    /// `fold_char` でそろえた読みで引く。ラティスを作るときは、読み全体を一度だけそろえてこちらで引く
+    pub(crate) fn lookup_folded(&self, folded: &str) -> &[u32] {
+        self.by_reading.get(folded).map_or(&[], Vec::as_slice)
     }
 
     /// 語を登録する。読みのカタカナはひらがなにそろえる。返すのは登録した語
@@ -164,7 +162,8 @@ impl UserDictionary {
     fn reindex(&mut self) {
         self.by_reading.clear();
         for (i, w) in self.words.iter().enumerate() {
-            self.by_reading.entry(w.reading.to_ascii_lowercase()).or_default().push(i as u32);
+            let key = w.reading.chars().map(fold_char).collect();
+            self.by_reading.entry(key).or_default().push(i as u32);
         }
         self.max_chars = self.words.iter().map(|w| w.reading.chars().count()).max().unwrap_or(0);
     }
@@ -207,13 +206,31 @@ impl UserDictionary {
     }
 }
 
-/// 読みをそろえて確かめる。前後の空白を除き、カタカナをひらがなに、全角英数字を半角にする（設定画面で IME が
-/// 全角のまま打っても登録できるように）。打った読みに出てくる文字（ひらがな・「ー」・英数字）だけを受け付ける
+/// 引くときに読みの1文字をそろえる。英字は小文字に、全角の英数字・記号は半角に、ローマ字入力で日本語の記号に
+/// なるもの（「、。「」・ー」）はその元の半角にする。打ったモード（かな・英数）や IME の全角・半角で読みの記号が
+/// 変わっても、同じ語を引けるようにするため。1文字を1文字に置き換えるので、文字位置は変わらない
+pub(crate) fn fold_char(c: char) -> char {
+    let c = match c {
+        '！'..='～' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+        '、' => ',',
+        '。' => '.',
+        '「' => '[',
+        '」' => ']',
+        '・' => '/',
+        'ー' => '-',
+        '〜' => '~',
+        _ => c,
+    };
+    c.to_ascii_lowercase()
+}
+
+/// 読みをそろえて確かめる。前後の空白を除き、カタカナをひらがなに、全角の英数字・記号を半角にする（設定画面で
+/// IME が全角のまま打っても登録できるように）。打った読みに出てくる文字（ひらがな・「ー」・英数字・記号）だけを受け付ける
 fn normalize_reading(reading: &str) -> Result<String, UserDictError> {
     let reading: String = katakana_to_hiragana(reading.trim())
         .chars()
         .map(|c| match c {
-            'Ａ'..='Ｚ' | 'ａ'..='ｚ' | '０'..='９' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+            '！'..='～' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
             _ => c,
         })
         .collect();
@@ -223,9 +240,15 @@ fn normalize_reading(reading: &str) -> Result<String, UserDictError> {
     if reading.chars().count() > MAX_READING_CHARS {
         return Err(UserDictError::Invalid(format!("読みは {MAX_READING_CHARS} 文字までです")));
     }
-    let ok = |c: char| matches!(c, 'ぁ'..='ゖ' | 'ー') || c.is_ascii_alphanumeric();
+    if reading.chars().any(char::is_whitespace) {
+        // スペースは変換で必ず文節の切れ目になるので、またがる語は出せない
+        return Err(UserDictError::Invalid("読みにスペースは入れられません".into()));
+    }
+    // 記号は、文字（漢字・カタカナなど）でも空白・制御文字でもないもの
+    let symbol = |c: char| !c.is_alphanumeric() && !c.is_control();
+    let ok = |c: char| matches!(c, 'ぁ'..='ゖ' | 'ー') || c.is_ascii_alphanumeric() || symbol(c);
     if !reading.chars().all(ok) {
-        return Err(UserDictError::Invalid("読みはひらがなと英数字で入れてください".into()));
+        return Err(UserDictError::Invalid("読みはひらがな・英数字・記号で入れてください".into()));
     }
     Ok(reading)
 }
@@ -284,7 +307,26 @@ mod tests {
         assert_eq!(d.add("Tしゃつ", "Tシャツ", UserPos::Noun).unwrap().reading, "Tしゃつ");
         assert_eq!(d.lookup("tしゃつ").len(), 1);
         assert_eq!(d.add("mp３", "MP3", UserPos::Noun).unwrap().reading, "mp3");
-        assert!(d.add("c++", "C++", UserPos::Noun).is_err());
+    }
+
+    #[test]
+    fn accepts_symbol_readings() {
+        let mut d = UserDictionary::new();
+        // 全角の記号は半角にそろえて登録する
+        assert_eq!(d.add("ｃ＋＋", "C++", UserPos::Noun).unwrap().reading, "c++");
+        assert_eq!(d.lookup("C++").len(), 1);
+        // かなモードで打った「、。「」・ー？！～」でも、英数モードの半角でも引く
+        d.add("[えすえふ]", "『SF』", UserPos::Noun).unwrap();
+        assert_eq!(d.lookup("「えすえふ」").len(), 1);
+        d.add("よし!", "ヨシ！", UserPos::Noun).unwrap();
+        assert_eq!(d.lookup("よし！").len(), 1);
+        d.add("★ほし", "★星", UserPos::Noun).unwrap();
+        assert_eq!(d.lookup("★ほし").len(), 1);
+        // 長音と「-」も同じに引く
+        assert_eq!(d.add("らーめん", "ラーメン", UserPos::Noun).unwrap().reading, "らーめん");
+        assert_eq!(d.lookup("ら-めん").len(), 1);
+        assert!(d.add("よ み", "読み", UserPos::Noun).is_err());
+        assert!(d.add("よ	み", "読み", UserPos::Noun).is_err());
     }
 
     #[test]
