@@ -21,6 +21,8 @@ pub const MIN_REST_CHARS_SYSTEM: usize = 2;
 const SYSTEM_AMBIGUOUS_KEYS: usize = 300;
 /// システム辞書の続きは、コストがこれ以下のよく使う語に限る
 const SYSTEM_MAX_COST: i16 = 5000;
+/// 打った読みそのものが、続きの語よりこれだけ以上よく使う語なら出さない（「わたし」→「私の男」）
+const SYSTEM_TYPED_WORD_MARGIN: i32 = 1500;
 /// システム辞書の続きは、2番目の語とコストがこれだけ離れているときだけ出す（迷う場面では出さない）
 const SYSTEM_MIN_MARGIN: i32 = 500;
 
@@ -79,22 +81,25 @@ impl Engine {
         }
         let prefix: String = typed.iter().collect();
         let dict = self.dictionary();
-        // 補う語の読みごとに、一番低いコストとその表記、出してよい語か。
-        // 出さない語も、迷う相手としては数える（「こんぽ」は「根本」かもしれない）
-        let mut per_reading: Vec<(i16, String, String, bool)> = Vec::new();
+        // 出せる語の読みごとに、一番低いコストとその表記。短い語（「あにめ」に対する「アニメ」）は迷う相手に数えない。
+        // 数えると、短い語の方がよく使われるので3文字では出せず、出るのが遅く感じる
+        let mut per_reading: Vec<(i16, String, String)> = Vec::new();
         let mut keys = 0;
         dict.predictive_search(&prefix, SYSTEM_AMBIGUOUS_KEYS + 1, |reading, range| {
             keys += 1;
             let rest: Vec<char> = reading.chars().skip(typed.len()).collect();
             // 短い語、1文字だけ補う語、続きが小さいかなで始まる語（「ひょうじ」→「ひょうじゅん」は「じゅ」を打っている途中）は出さない
-            let eligible = long_enough(reading)
-                && rest.len() >= MIN_REST_CHARS_SYSTEM
-                && !matches!(rest[0], 'ぁ' | 'ぃ' | 'ぅ' | 'ぇ' | 'ぉ' | 'ゃ' | 'ゅ' | 'ょ' | 'ゎ');
+            if !long_enough(reading)
+                || rest.len() < MIN_REST_CHARS_SYSTEM
+                || matches!(rest[0], 'ぁ' | 'ぃ' | 'ぅ' | 'ぇ' | 'ぉ' | 'ゃ' | 'ゅ' | 'ょ' | 'ゎ')
+            {
+                return;
+            }
             let mut best: Option<(i16, String)> = None;
             for i in range {
                 let e = dict.entry(i);
                 // 名詞だけ（語の末尾の品詞で見る）。活用した語（「サジェストすれ」）や、たまたま読みが重なる
-                // 固有名詞は出さず、迷う相手にも数えない
+                // 固有名詞は出さない
                 if !dict.is_noun(e.rid) {
                     continue;
                 }
@@ -108,25 +113,30 @@ impl Engine {
                 }
             }
             if let Some((cost, surface)) = best {
-                per_reading.push((cost, reading.to_owned(), surface, eligible));
+                per_reading.push((cost, reading.to_owned(), surface));
             }
         });
         if keys > SYSTEM_AMBIGUOUS_KEYS {
             return None;
         }
         per_reading.sort();
-        let (cost, reading, surface, eligible) = per_reading.first()?;
-        if !eligible || *cost > SYSTEM_MAX_COST {
+        let (cost, reading, surface) = per_reading.first()?;
+        if *cost > SYSTEM_MAX_COST {
             return None;
         }
         if per_reading
             .get(1)
-            .is_some_and(|(second, _, _, _)| (*second as i32) - (*cost as i32) < SYSTEM_MIN_MARGIN)
+            .is_some_and(|(second, _, _)| (*second as i32) - (*cost as i32) < SYSTEM_MIN_MARGIN)
         {
             return None;
         }
-        // 打った読みがそれだけで、補う語より自然な語になっているなら出さない（「あにめ」は「アニメ」で足りている）
-        if dict.lookup(&prefix).iter().any(|e| e.cost <= *cost) {
+        // 打った読みそのものが、続きの語よりずっとよく使う語なら出さない（「わたし」は「私」で足りている）。
+        // 少しよく使う程度（「あにめ」の「アニメ」と「アニメーション」）なら出す
+        if dict
+            .lookup(&prefix)
+            .iter()
+            .any(|e| (e.cost as i32) + SYSTEM_TYPED_WORD_MARGIN <= *cost as i32)
+        {
             return None;
         }
         Some(found(reading, surface))
@@ -173,6 +183,12 @@ mod tests {
             ("たいみんぐべると", 0, 6700, "タイミングベルト"),
             // 読みが6文字の語は出さない
             ("でーたべーす", 0, 4200, "データベース"),
+            // コストの近い長い語が2つある
+            ("あぷりけーしょん", 0, 4100, "アプリケーション"),
+            ("あぷりけーたーず", 0, 4300, "アプリケーターズ"),
+            // 打った読みそのものがずっとよく使う語
+            ("わたし", 0, 0, "私"),
+            ("わたしのおとこ", 0, 4700, "私の男"),
         ] {
             b.add_entry(RawEntry {
                 reading: reading.into(),
@@ -200,6 +216,9 @@ mod tests {
         let s = e.suggest("きょうはあにめー", &[4], &user).unwrap();
         assert_eq!((s.matched, s.reading.as_str(), s.surface.as_str()), (4, "あにめーしょん", "アニメーション"));
         assert_eq!(e.suggest("こんぽー", &[0], &user).unwrap().surface, "コンポーネント");
+        // 3文字でも出す。短い語（「アニメ」「根本」）がよく使われても、迷う相手には数えない
+        assert_eq!(e.suggest("あにめ", &[0], &user).unwrap().surface, "アニメーション");
+        assert_eq!(e.suggest("こんぽ", &[0], &user).unwrap().surface, "コンポーネント");
         assert_eq!(e.suggest("いんたー", &[0], &user).unwrap().surface, "インターネット");
         // 2文字では出さない。打ち終えた語も出さない
         assert_eq!(e.suggest("あに", &[0], &user), None);
@@ -211,10 +230,10 @@ mod tests {
         let e = engine();
         let user = UserData::default();
         let none = |kana: &str| e.suggest(kana, &[0], &user).map(|s| s.surface);
-        // 打った読みがそれだけで、補う語より自然な語になっている
-        assert_eq!(none("あにめ"), None);
-        // 2番目の語とコストが近く、どちらか分からない（「コンポーネント」と「根本」）
-        assert_eq!(none("こんぽ"), None);
+        // 打った読みそのものが、ずっとよく使う語になっている
+        assert_eq!(none("わたし"), None);
+        // 長い語どうしでコストが近く、どちらか分からない
+        assert_eq!(none("あぷり"), None);
         // 短い語、人名、小さいかなで続く語（「じゅ」を打っている途中）、コストの高い語
         assert_eq!(none("でーた"), None);
         assert_eq!(none("ました"), None);
