@@ -142,6 +142,11 @@ body {
   margin-bottom: 14px;
 }
 
+/* 最後の文節（ふつうは打っている文節）は左にそろえる。中央だと、打つたびに文字が左右に動いて見づらい */
+.seg-block.last {
+  align-items: flex-start;
+}
+
 .seg-reading {
   line-height: 1.6;
 }

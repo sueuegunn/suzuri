@@ -1129,7 +1129,11 @@ export default function App() {
                       chars(seg.reading, seg.start, i === segments.length - 1)
                     ) : (
                       // ひらがなと候補を縦に積んだ箱。箱は途中で折り返さないので、文節が行をまたがない
-                      <span className="seg-block" data-seg={i} {...segHandlers(i)}>
+                      <span
+                        className={"seg-block" + (i === segments.length - 1 ? " last" : "")}
+                        data-seg={i}
+                        {...segHandlers(i)}
+                      >
                         <span className={segClass(i) + " seg-reading"}>
                           {chars(seg.reading, seg.start, i === segments.length - 1)}
                         </span>
