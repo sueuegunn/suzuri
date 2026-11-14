@@ -1578,7 +1578,8 @@ const RESIZE_EDGES: { dir: ResizeDirection; className: string }[] = [
 
 /**
  * 大きさを変えるための掴みどころ。枠のないウィンドウは OS の縁がないため。
- * パネルの外の透明な余白と、パネルの縁のぼかしにまたがって置き、見た目の縁より少し外を押しても掴めるようにする
+ * パネルの外の透明な余白と、パネルの縁の内側にまたがって置き、見た目の縁より少し外を押しても掴めるようにする。
+ * 角にはいつも太い弧を、辺にはマウスを乗せたときに太い線を出す（styles.css の .resize::after）
  */
 function ResizeHandles() {
   return (
