@@ -124,7 +124,7 @@ body {
   /* 1行目のピンの頭が、上の英数・かなの切り替えに重ならないようにする */
   padding-top: 10px;
   /* ひらがなの行は候補の行（26px）より小さくし、見分けやすくする */
-  font-size: calc(20px * var(--text-scale));
+  font-size: calc(22px * var(--text-scale));
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -143,6 +143,8 @@ body {
 }
 
 .seg-reading {
+  /* 候補の方が長い文節では、ひらがなを箱（文節）の中央に置く */
+  align-self: center;
   line-height: 1.6;
 }
 
