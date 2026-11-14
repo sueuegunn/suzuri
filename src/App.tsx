@@ -143,7 +143,7 @@ export default function App() {
   /** ひらがなと候補を並べる領域。ピンの位置の計算の基準 */
   const bodyRef = useRef<HTMLDivElement>(null);
   /** 各文節の候補の行の要素。候補一覧の位置合わせに使う */
-  const resultRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const candidateRefs = useRef<(HTMLSpanElement | null)[]>([]);
   /** 候補の行で右ボタンを押した文節と、今乗っている文節（文節の番号）。離したらその範囲を辞書に登録する */
   const [registerSel, setRegisterSelState] = useState<{ from: number; to: number } | null>(null);
   const registerSelRef = useRef(registerSel);
@@ -1025,13 +1025,13 @@ export default function App() {
   };
 
   /** 候補の行で右ボタンを押したら、離したところまでの文節を登録する。動かさずに離したらその文節だけ */
-  const onResultRightDown = (i: number, e: React.PointerEvent) => {
+  const onRegisterDown = (i: number, e: React.PointerEvent) => {
     if (!isRightButton(e) || !sessionRef.current.segments) return;
     setRegisterSel({ from: i, to: i });
     bodyRef.current?.setPointerCapture(e.pointerId);
   };
 
-  const onResultMove = (e: React.PointerEvent) => {
+  const onRegisterMove = (e: React.PointerEvent) => {
     const r = registerSelRef.current;
     if (!r) return;
     const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-seg]");
@@ -1040,7 +1040,7 @@ export default function App() {
     if (to !== r.to) setRegisterSel({ ...r, to });
   };
 
-  const onResultUp = () => {
+  const onRegisterUp = () => {
     const r = registerSelRef.current;
     if (!r) return;
     setRegisterSel(null);
@@ -1048,8 +1048,8 @@ export default function App() {
   };
 
   /** 領域の上での右ドラッグ。範囲を1文節にまとめる（ひらがなの行）か、辞書に登録する（候補の行）かのどちらか一方だけが動く */
-  const onAreaMove = (e: React.PointerEvent) => (registerSelRef.current ? onResultMove(e) : onRangeMove(e));
-  const onAreaUp = () => (registerSelRef.current ? onResultUp() : onRangeUp());
+  const onAreaMove = (e: React.PointerEvent) => (registerSelRef.current ? onRegisterMove(e) : onRangeMove(e));
+  const onAreaUp = () => (registerSelRef.current ? onRegisterUp() : onRangeUp());
   const onAreaCancel = () => {
     pinPressRef.current = null;
     setRange(null);
@@ -1142,9 +1142,9 @@ export default function App() {
                         <span
                           className={candidateClass(i)}
                           ref={(el) => {
-                            resultRefs.current[i] = el;
+                            candidateRefs.current[i] = el;
                           }}
-                          onPointerDown={(e) => onResultRightDown(i, e)}
+                          onPointerDown={(e) => onRegisterDown(i, e)}
                           onDoubleClick={(e) => {
                             if (e.button === 0) bake(i);
                           }}
@@ -1186,7 +1186,7 @@ export default function App() {
           </div>
         )}
         {segments && listFor !== null && segments[listFor] && (
-          <CandidateList segment={segments[listFor]} anchor={() => resultRefs.current[listFor]} />
+          <CandidateList segment={segments[listFor]} anchor={() => candidateRefs.current[listFor]} />
         )}
         <div className="footer">
           <div className="hint">
