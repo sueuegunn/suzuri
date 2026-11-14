@@ -130,10 +130,8 @@ export default function App() {
     rangeRef.current = r;
     setRangeSel(r);
   };
-  const [hover, setHover] = useState<number | null>(null);
-  /** F6〜F10 は、マウスを乗せている文節に効かせる。キーの処理から読むので ref にも持つ */
-  const hoverRef = useRef(hover);
-  hoverRef.current = hover;
+  /** マウスを乗せている文節。F6〜F10 をこの文節に効かせる。強調は CSS の :hover で行うので、描き直さないよう ref だけに持つ */
+  const hoverRef = useRef<number | null>(null);
   /** 上の掴みどころ・入力モードの切り替えのどれにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
   const [topHover, setTopHover] = useState<"grabber" | "input" | null>(null);
   /** 呼び出すたびに、呼び出し元の IME に合わせて決め直す */
@@ -678,16 +676,20 @@ export default function App() {
   const gapPositions = () => {
     const body = bodyRef.current!;
     const origin = body.getBoundingClientRect();
-    const chars = [...body.querySelectorAll<HTMLElement>("[data-pos]")]
-      .sort((a, b) => Number(a.dataset.pos) - Number(b.dataset.pos))
-      .map((el) => el.getBoundingClientRect());
+    const els = [...body.querySelectorAll<HTMLElement>("[data-pos]")].sort(
+      (a, b) => Number(a.dataset.pos) - Number(b.dataset.pos),
+    );
+    const chars = els.map((el) => el.getBoundingClientRect());
     const gaps = new Map<number, { x: number; y: number; height: number }>();
     for (let g = 1; g < chars.length; g++) {
       const [prev, cur] = [chars[g - 1], chars[g]];
       const sameRow = Math.abs(prev.top - cur.top) < cur.height / 2;
       const x = sameRow ? (prev.right + cur.left) / 2 : cur.left;
-      // ゴーストのピンを .body の中に置くので、.body の左上を原点にする
-      gaps.set(g, { x: x - origin.left, y: cur.top - origin.top + body.scrollTop, height: cur.height });
+      // ゴーストのピンは本物のピンと同じく、文字の上端から候補の行の下端（文節の箱の下端）まで伸ばす
+      const box = els[g].closest(".seg-block")?.getBoundingClientRect();
+      const bottom = box ? box.bottom : cur.bottom;
+      // ゴーストのピンを領域の中に置くので、領域の左上を原点にする
+      gaps.set(g, { x: x - origin.left, y: cur.top - origin.top + body.scrollTop, height: bottom - cur.top });
     }
     return gaps;
   };
@@ -820,7 +822,7 @@ export default function App() {
       setListFor(null);
       setDrag(null);
       setRange(null);
-      setHover(null);
+      hoverRef.current = null;
       window.focus();
     });
     // Alt+F4 などで閉じられたら、Esc と同じく閉じる
@@ -940,10 +942,8 @@ export default function App() {
     // React の onWheel は passive で止められないため、ここで止める。Ctrl+ホイールの拡大縮小も止まる
     const noWheelScroll = (e: WheelEvent) => {
       e.preventDefault();
-      if (!e.ctrlKey || !(e.target instanceof Element)) return;
-      // マウスがひらがなと候補の領域にあるときだけスクロールする
-      const area = e.target.closest<HTMLElement>(".area");
-      if (!area) return;
+      const area = bodyRef.current;
+      if (!e.ctrlKey || !area) return;
       const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? area.clientHeight : 1;
       area.scrollTop += e.deltaY * unit;
     };
@@ -997,8 +997,9 @@ export default function App() {
     </>
   );
 
-  /** 候補一覧を出している文節に印を付ける。マウスが乗っている行の強調は CSS の :hover で行う */
-  const segClass = (i: number) => "seg" + (listFor === i ? " active" : "");
+  /** 候補の行に、候補一覧を出している印と、登録しようとしている印を付ける。マウスが乗っている行の強調は CSS の :hover で行う */
+  const candidateClass = (i: number) =>
+    "seg seg-candidate" + (listFor === i ? " active" : "") + (registering(i) ? " register-select" : "");
 
   /** i〜j 番目の文節（逆順でもよい）を、今の候補のままユーザー辞書に登録する */
   const registerSegments = async (i: number, j: number) => {
@@ -1046,15 +1047,26 @@ export default function App() {
     registerSegments(r.from, r.to);
   };
 
+  /** 領域の上での右ドラッグ。範囲を1文節にまとめる（ひらがなの行）か、辞書に登録する（候補の行）かのどちらか一方だけが動く */
+  const onAreaMove = (e: React.PointerEvent) => (registerSelRef.current ? onResultMove(e) : onRangeMove(e));
+  const onAreaUp = () => (registerSelRef.current ? onResultUp() : onRangeUp());
+  const onAreaCancel = () => {
+    pinPressRef.current = null;
+    setRange(null);
+    setRegisterSel(null);
+  };
+
   const registering = (i: number) =>
     registerSel !== null && Math.min(registerSel.from, registerSel.to) <= i && i <= Math.max(registerSel.from, registerSel.to);
 
   /** 文節の箱（ひらがなと候補の両方）のマウス操作 */
   const segHandlers = (i: number) => ({
     onWheel: (e: React.WheelEvent) => onWheel(i, e),
-    onMouseEnter: () => setHover(i),
+    onMouseEnter: () => {
+      hoverRef.current = i;
+    },
     onMouseLeave: () => {
-      setHover(null);
+      hoverRef.current = null;
       if (listFor === i) setListFor(null);
     },
   });
@@ -1091,19 +1103,9 @@ export default function App() {
           className="area"
           ref={bodyRef}
           onClick={onReadingClick}
-          onPointerMove={(e) => {
-            onRangeMove(e);
-            onResultMove(e);
-          }}
-          onPointerUp={() => {
-            onRangeUp();
-            onResultUp();
-          }}
-          onPointerCancel={() => {
-            pinPressRef.current = null;
-            setRange(null);
-            setRegisterSel(null);
-          }}
+          onPointerMove={onAreaMove}
+          onPointerUp={onAreaUp}
+          onPointerCancel={onAreaCancel}
         >
           <div className="reading">
             {segments
@@ -1134,11 +1136,11 @@ export default function App() {
                         data-seg={i}
                         {...segHandlers(i)}
                       >
-                        <span className={segClass(i) + " seg-reading"}>
+                        <span className="seg seg-reading">
                           {chars(seg.reading, seg.start, i === segments.length - 1)}
                         </span>
                         <span
-                          className={segClass(i) + " seg-candidate" + (registering(i) ? " register-select" : "")}
+                          className={candidateClass(i)}
                           ref={(el) => {
                             resultRefs.current[i] = el;
                           }}
@@ -1260,8 +1262,9 @@ function InputModeButton({
 
 /**
  * el の最後の行が area の見える範囲から上下にはみ出していたら、area を最小限スクロールして入れる。
- * 何行にもまたがる文節の全体を見ると、上端に合わせて先頭まで戻ってしまう（打つたびに上へ飛んで戻る）ので、
- * 打っている場所である最後の行だけを見る。scrollIntoView はパネルなど外側の要素までスクロールさせるので使わない
+ * 文節の箱はふつう1行に収まるが、行の幅より長い文節は箱の中で折り返す。その全体を見ると上端に合わせて
+ * 先頭まで戻ってしまう（打つたびに上へ飛んで戻る）ので、最後の行だけを見る。
+ * scrollIntoView はパネルなど外側の要素までスクロールさせるので使わない
  */
 function keepInView(area: HTMLElement, el: HTMLElement) {
   const a = area.getBoundingClientRect();

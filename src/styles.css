@@ -111,7 +111,7 @@ body {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  /* 空白のない長い英字の並びも、行の幅で折り返す */
+  /* 行の幅より長い文節（空白のない長い英字の並びなど）を、箱の中で折り返す */
   overflow-wrap: anywhere;
 }
 
@@ -145,10 +145,6 @@ body {
 /* 最後の文節（ふつうは打っている文節）は左にそろえる。中央だと、打つたびに文字が左右に動いて見づらい */
 .seg-block.last {
   align-items: flex-start;
-}
-
-.seg-reading {
-  line-height: 1.6;
 }
 
 .seg-candidate {
@@ -635,7 +631,7 @@ body.settings-body {
 }
 
 /* 候補の行で右ドラッグして、ユーザー辞書に登録しようとしている文節 */
-.seg.register-select {
+.seg-candidate.register-select {
   background: var(--active);
 }
 
