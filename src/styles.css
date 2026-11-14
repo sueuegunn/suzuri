@@ -130,21 +130,19 @@ body {
 }
 
 /* 文節ごとに、ひらがな（上）と候補（下）を縦に積んだ箱。箱は横に並べ、文節の切れ目で折り返す。
-   箱の幅はひらがなと候補の長い方になり、短い方の後ろは空く。
+   箱の幅はひらがなと候補の長い方になり、短い方の両側が空く。
    行の幅より長い文節だけは、箱の中で折り返す（幅は行の幅で頭打ちになる）。
-   揃え方は align-items で変えられる（flex-start で先頭、center で中央） */
+   ひらがなと候補は、どちらも箱の中央にそろえる */
 .seg-block {
   display: inline-flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   vertical-align: top;
   /* 次の行のピンの頭が、この箱の候補の行に重ならないよう、下をあける */
   margin-bottom: 14px;
 }
 
 .seg-reading {
-  /* 候補の方が長い文節では、ひらがなを箱（文節）の中央に置く */
-  align-self: center;
   line-height: 1.6;
 }
 
