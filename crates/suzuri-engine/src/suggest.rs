@@ -7,7 +7,7 @@
 //! 変換中に呼ぶので、メモリ上の表と辞書だけを見る。
 
 use crate::user_dict::fold_char;
-use crate::{Engine, UserData, UserPos};
+use crate::{Engine, UserData};
 
 /// 続きに出す語の読みの長さの下限（文字数）
 pub const MIN_WORD_CHARS: usize = 7;
@@ -61,12 +61,12 @@ impl Engine {
             if let Some(w) = words.iter().rev().find(|w| long_enough(&w.reading) && extends(&w.reading, &folded)) {
                 return Some(found(&w.reading, &w.surface));
             }
-            // 学習データは文節（「会議室で」）で覚えているので、システム辞書に同じ読みと表記の語があるものだけを使う
+            // 学習データは文節（「会議室で」）で覚えているので、システム辞書に同じ読みと表記の名詞があるものだけを使う
             if let Some((r, s, _)) = user
                 .history
                 .entries()
                 .filter(|(r, s, _)| {
-                    long_enough(r) && extends(r, &folded) && self.dictionary().lookup(r).iter().any(|e| e.surface.resolve(r) == *s)
+                    long_enough(r) && extends(r, &folded) && self.dictionary().lookup(r).iter().any(|e| self.dictionary().is_noun(e.rid) && e.surface.resolve(r) == *s)
                 })
                 .max_by_key(|(_, _, t)| *t)
             {
@@ -79,10 +79,6 @@ impl Engine {
         }
         let prefix: String = typed.iter().collect();
         let dict = self.dictionary();
-        let names: Vec<u16> = [UserPos::Person, UserPos::Place, UserPos::Organization]
-            .iter()
-            .map(|&p| dict.user_pos_id(p))
-            .collect();
         // 補う語の読みごとに、一番低いコストとその表記、出してよい語か。
         // 出さない語も、迷う相手としては数える（「こんぽ」は「根本」かもしれない）
         let mut per_reading: Vec<(i16, String, String, bool)> = Vec::new();
@@ -97,8 +93,9 @@ impl Engine {
             let mut best: Option<(i16, String)> = None;
             for i in range {
                 let e = dict.entry(i);
-                // 人名・地名・組織名は、打っている語とたまたま読みが重なっただけのことが多い
-                if names.contains(&e.lid) {
+                // 名詞だけ（語の末尾の品詞で見る）。活用した語（「サジェストすれ」）や、たまたま読みが重なる
+                // 固有名詞は出さず、迷う相手にも数えない
+                if !dict.is_noun(e.rid) {
                     continue;
                 }
                 let surface = e.surface.resolve(reading);
@@ -153,12 +150,11 @@ mod tests {
     use crate::dict::{Dictionary, DictionaryBuilder, RawEntry};
     use crate::{Committed, UserPos};
 
-    /// 品詞は 0 が名詞、1 が人名などの固有名
+
+    /// 品詞は 0 が名詞、1 が人名などの固有名、2 が動詞の活用形
     fn engine() -> Engine {
         let mut b = DictionaryBuilder::new(3, 2);
-        for pos in [UserPos::Person, UserPos::Place, UserPos::Organization] {
-            b.set_user_pos(pos, 1);
-        }
+        b.set_noun(0, true);
         for (reading, lid, cost, surface) in [
             ("あにめ", 0, 3000, "アニメ"),
             ("あにめーしょん", 0, 4000, "アニメーション"),
@@ -169,6 +165,8 @@ mod tests {
             ("こんぽん", 0, 4600, "根本"),
             // 人名・英字だけの略語・小さいかなで続く語・コストの高い語は出さない
             ("ましたこのみ", 1, 1000, "間下このみ"),
+            ("さじぇすと", 0, 5900, "サジェスト"),
+            ("さじぇすとすれ", 2, 4900, "サジェストすれ"),
             ("いんたーちぇんじ", 0, 1900, "IC"),
             ("いんたーねっと", 0, 3700, "インターネット"),
             ("ひょうじゅん", 0, 2800, "標準"),
@@ -220,6 +218,8 @@ mod tests {
         // 短い語、人名、小さいかなで続く語（「じゅ」を打っている途中）、コストの高い語
         assert_eq!(none("でーた"), None);
         assert_eq!(none("ました"), None);
+        // 名詞でない語（「サジェストする」の活用形）
+        assert_eq!(none("さじぇす"), None);
         assert_eq!(none("ひょうじ"), None);
         assert_eq!(none("たいみん"), None);
     }

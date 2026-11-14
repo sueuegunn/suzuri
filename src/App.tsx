@@ -1211,12 +1211,6 @@ export default function App() {
                       >
                         <span className="seg seg-reading">
                           {chars(seg.reading, seg.start, i === segments.length - 1)}
-                          {i === segments.length - 1 && ghost && (
-                            <>
-                              <span className="suggestion">{ghost.rest}</span>
-                              <span className="suggestion-key">Tab</span>
-                            </>
-                          )}
                         </span>
                         <span
                           className={candidateClass(i)}
@@ -1233,8 +1227,11 @@ export default function App() {
                           ) : (
                             seg.candidates[seg.selected]
                           )}
-                          {i === segments.length - 1 && ghost && !ghost.replace && (
-                            <span className="suggestion">{ghost.surfaceRest}</span>
+                          {i === segments.length - 1 && ghost && (
+                            <>
+                              {!ghost.replace && <span className="suggestion">{ghost.surfaceRest}</span>}
+                              <span className="suggestion-key">Tab</span>
+                            </>
                           )}
                         </span>
                       </span>
@@ -1392,20 +1389,18 @@ function visibleSuggestion(s: Session, sg: SuggestionFor | null): SuggestionFor 
 }
 
 /**
- * 打っている語の続きを、最後の文節の中に薄く出す内容。ひらがなの行には足すかな（rest）を出す。
- * 候補の行は、語の表記が今の候補で始まり、続きの語が最後の文節の先頭から始まるときは足す部分（surfaceRest）だけを、
+ * 打っている語の続きを、最後の文節の候補の行に薄く出す内容。ひらがなの行には出さない（Tab で採ったら両方に足す）。
+ * 語の表記が今の候補で始まり、続きの語が最後の文節の先頭から始まるときは足す部分（surfaceRest）だけを、
  * そうでなければ語の表記で今の候補を置き換えて（replace）出す
  */
 function suggestionGhost(s: Session, sg: SuggestionFor | null) {
   const shown = visibleSuggestion(s, sg);
   const last = s.segments?.[s.segments.length - 1];
   if (!shown || !last) return null;
-  const rest = Array.from(shown.reading).slice(shown.matched).join("");
   const candidate = last.candidates[last.selected];
   const fromLast = length(s.kana) - shown.matched === last.start;
   const extends_ = fromLast && shown.surface.startsWith(candidate);
   return {
-    rest,
     surface: shown.surface,
     surfaceRest: extends_ ? shown.surface.slice(candidate.length) : shown.surface,
     replace: fromLast && !extends_,

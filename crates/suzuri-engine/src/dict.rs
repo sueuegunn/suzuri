@@ -3,7 +3,7 @@
 //! 形式（数値はすべてリトルエンディアン）:
 //!
 //! ```text
-//! ヘッダー  magic(8) pos_count(u32) unknown_id(u32) 各セクションの (offset u32, len u32) × 7
+//! ヘッダー  magic(8) pos_count(u32) unknown_id(u32) 各セクションの (offset u32, len u32) × 8
 //! 接続コスト  i16 × pos_count²       （rid * pos_count + lid の順）
 //! 文節境界    1bit × pos_count²      （同上。1 なら rid と lid の間で文節を区切る）
 //! 読み索引    fst::Map               （読み → 開始位置 << 16 | 件数）
@@ -11,6 +11,7 @@
 //! 表記        長さ u16 + UTF-8       （読みと同じ・カタカナ以外の表記だけを重複なく置く）
 //! ユーザー辞書の品詞  u16 × UserPos::ALL.len()  （UserPos::ALL の順の品詞ID）
 //! 付属語      1bit × pos_count       （1 なら助詞・助動詞。文節を自立語と付属語に分けるのに使う）
+//! 名詞        1bit × pos_count       （1 なら続きの予測に出せる名詞。固有名詞・接尾・非自立・数・代名詞は除く）
 //! ```
 
 use std::borrow::Cow;
@@ -24,8 +25,8 @@ use std::sync::Arc;
 use crate::kana::hiragana_to_katakana;
 use crate::user_dict::UserPos;
 
-const MAGIC: &[u8; 8] = b"SZRDIC03";
-const SECTION_COUNT: usize = 7;
+const MAGIC: &[u8; 8] = b"SZRDIC04";
+const SECTION_COUNT: usize = 8;
 const HEADER_SIZE: usize = 8 + 4 + 4 + SECTION_COUNT * 8;
 const ENTRY_SIZE: usize = 10;
 /// 表記が読みと同じ（ひらがなのまま）
@@ -79,6 +80,7 @@ pub struct DictionaryBuilder {
     entries: Vec<RawEntry>,
     user_pos: [u16; UserPos::ALL.len()],
     functional: Vec<u8>,
+    noun: Vec<u8>,
 }
 
 impl DictionaryBuilder {
@@ -93,6 +95,7 @@ impl DictionaryBuilder {
             entries: Vec::new(),
             user_pos: [unknown_id; UserPos::ALL.len()],
             functional: vec![0; n.div_ceil(8)],
+            noun: vec![0; n.div_ceil(8)],
         }
     }
 
@@ -108,6 +111,16 @@ impl DictionaryBuilder {
             self.functional[i / 8] |= 1 << (i % 8);
         } else {
             self.functional[i / 8] &= !(1 << (i % 8));
+        }
+    }
+
+    /// 品詞が続きの予測に出せる名詞かを決める
+    pub fn set_noun(&mut self, id: u16, noun: bool) {
+        let i = id as usize;
+        if noun {
+            self.noun[i / 8] |= 1 << (i % 8);
+        } else {
+            self.noun[i / 8] &= !(1 << (i % 8));
         }
     }
 
@@ -202,7 +215,7 @@ impl DictionaryBuilder {
             .collect();
         let user_pos: Vec<u8> = self.user_pos.iter().flat_map(|id| id.to_le_bytes()).collect();
         let sections: [&[u8]; SECTION_COUNT] =
-            [&connection, &self.boundary, &index, &entry_bytes, &pool, &user_pos, &self.functional];
+            [&connection, &self.boundary, &index, &entry_bytes, &pool, &user_pos, &self.functional, &self.noun];
 
         let mut out = Vec::new();
         out.extend_from_slice(MAGIC);
@@ -289,6 +302,7 @@ pub struct Dictionary {
     pool: Range<usize>,
     user_pos: [u16; UserPos::ALL.len()],
     functional: Range<usize>,
+    noun: Range<usize>,
 }
 
 impl Dictionary {
@@ -324,7 +338,7 @@ impl Dictionary {
             }
             sections.push(offset..offset + len);
         }
-        let [connection, boundary, index, entries, pool, user_pos, functional]: [Range<usize>; SECTION_COUNT] =
+        let [connection, boundary, index, entries, pool, user_pos, functional, noun]: [Range<usize>; SECTION_COUNT] =
             sections.try_into().unwrap();
         let cells = pos_count * pos_count;
         if connection.len() != cells * 2 || boundary.len() != cells.div_ceil(8) {
@@ -332,6 +346,9 @@ impl Dictionary {
         }
         if functional.len() != pos_count.div_ceil(8) {
             return Err(invalid("付属語の領域の大きさが合いません"));
+        }
+        if noun.len() != pos_count.div_ceil(8) {
+            return Err(invalid("名詞の領域の大きさが合いません"));
         }
         if user_pos.len() != UserPos::ALL.len() * 2 {
             return Err(invalid("ユーザー辞書の品詞の領域の大きさが合いません"));
@@ -363,6 +380,7 @@ impl Dictionary {
             pool,
             user_pos,
             functional,
+            noun,
         };
         dict.validate_entries()?;
         Ok(dict)
@@ -424,6 +442,12 @@ impl Dictionary {
     pub fn is_functional(&self, id: u16) -> bool {
         let i = id as usize;
         i < self.pos_count && self.bytes()[self.functional.start + i / 8] & (1 << (i % 8)) != 0
+    }
+
+    /// 品詞が続きの予測に出せる名詞か。範囲外の品詞IDは名詞でないとみなす
+    pub fn is_noun(&self, id: u16) -> bool {
+        let i = id as usize;
+        i < self.pos_count && self.bytes()[self.noun.start + i / 8] & (1 << (i % 8)) != 0
     }
 
     /// 左の単語の右文脈IDと右の単語の左文脈IDから、つながりのコストを返す

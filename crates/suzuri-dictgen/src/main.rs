@@ -84,6 +84,7 @@ fn main() -> Result<()> {
     // 文節を自立語と付属語に分けるときの付属語。文脈つきの学習で文節の自立語を取り出すのに使う
     for (id, name) in pos.iter().enumerate() {
         builder.set_functional(id as u16, name.starts_with("助詞,") || name.starts_with("助動詞,"));
+        builder.set_noun(id as u16, is_suggestable_noun(name));
     }
 
     apply_connection(&mut builder, &read("src/data/dictionary_oss/connection_single_column.txt")?, pos.len())?;
@@ -148,6 +149,16 @@ fn fetch(cache: &Path, path: &str, hash: &str) -> Result<()> {
 
 fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// 続きの予測（サジェスト）に出せる名詞か。語の末尾の品詞（右文脈ID）で見る。
+/// 活用した語（「サジェストすれ」は動詞のサ変の仮定形）や、たまたま読みが重なる固有名詞、
+/// 単独では使わない接尾・非自立の語、数・代名詞は出さない
+fn is_suggestable_noun(name: &str) -> bool {
+    name.starts_with("名詞,")
+        && !["名詞,固有名詞,", "名詞,接尾", "名詞,非自立,", "名詞,数,", "名詞,代名詞,"]
+            .iter()
+            .any(|p| name.starts_with(p))
 }
 
 /// id.def の「ID 品詞」の行から、ID 順の品詞の一覧を作る
