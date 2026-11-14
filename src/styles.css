@@ -104,7 +104,7 @@ body {
   mask-composite: intersect;
 }
 
-/* 上段（読み）と下段（変換結果）は同じ高さで分け、それぞれではみ出したら縦にスクロールする。
+/* ひらがなと候補を並べる領域。はみ出したら縦にスクロールする。
    文字は折り返すので横にはスクロールさせない。行末のピンやカーソルが少しはみ出しても横のスクロールバーを出さない */
 .area {
   position: relative;
@@ -116,22 +116,6 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* 下段（変換後）は句読点や漢字で上段より行が少なくなりがちなので、区切りの線を上段の1行分下げる。
-   基準の大きさを2行分にすると、余りを上下で半分ずつ分けるので、ちょうど1行分の差になる。
-   文字を大きくした小さいウィンドウで下段が潰れないよう、30% までにする */
-.reading-area {
-  flex-basis: min(calc(2 * 24px * 1.9 * var(--text-scale)), 30%);
-}
-
-.result-area {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 2px solid var(--divider);
-  font-size: calc(26px * var(--text-scale));
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
 /* 右ドラッグで1文節にまとめようとしている範囲 */
 .char.range-select {
   background: var(--active);
@@ -141,9 +125,30 @@ body {
   /* 1行目のピンの頭が、上の英数・かなの切り替えに重ならないようにする */
   padding-top: 10px;
   font-size: calc(24px * var(--text-scale));
-  /* ピンの頭が上の行に重ならないよう、行の間をあける */
-  line-height: 1.9;
+  line-height: 1.6;
   white-space: pre-wrap;
+}
+
+/* 文節ごとに、ひらがな（上）と候補（下）を縦に積んだ箱。箱は横に並べ、文節の切れ目で折り返す。
+   箱の幅はひらがなと候補の長い方になり、短い方の後ろは空く。
+   行の幅より長い文節だけは、箱の中で折り返す（幅は行の幅で頭打ちになる）。
+   揃え方は align-items で変えられる（flex-start で先頭、center で中央） */
+.seg-block {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  vertical-align: top;
+  /* 次の行のピンの頭が、この箱の候補の行に重ならないよう、下をあける */
+  margin-bottom: 14px;
+}
+
+.seg-reading {
+  line-height: 1.6;
+}
+
+.seg-candidate {
+  font-size: calc(26 / 24 * 1em);
+  line-height: 1.5;
 }
 
 .seg {
@@ -206,8 +211,10 @@ body {
   width: 12px;
   padding: 0 5px;
   margin: 0 -5px;
+  /* 箱と箱の間で、ひらがなの行の高さにだけ立てる */
   height: 1.3em;
-  vertical-align: -0.25em;
+  margin-top: 0.15em;
+  vertical-align: top;
   cursor: ew-resize;
   touch-action: none;
 }
@@ -625,12 +632,12 @@ body.settings-body {
   text-align: center;
 }
 
-/* 下段で右ドラッグして、ユーザー辞書に登録しようとしている文節 */
+/* 候補の行で右ドラッグして、ユーザー辞書に登録しようとしている文節 */
 .seg.register-select {
   background: var(--active);
 }
 
-/* ユーザー辞書に登録したときの知らせ。上下の区切り線に重ね、常に1行だけ出す */
+/* ユーザー辞書に登録したときの知らせ。下の案内の欄に重ね、常に1行だけ出す */
 .notice-anchor {
   position: relative;
   height: 0;
@@ -640,8 +647,8 @@ body.settings-body {
 .notice {
   position: absolute;
   left: 50%;
-  /* 下段の上の余白（12px）と区切り線（2px）の真ん中 */
-  top: 13px;
+  /* 案内の欄（上の余白 8px と、マウスの絵の高さ）の真ん中 */
+  top: 18px;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;

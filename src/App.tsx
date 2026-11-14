@@ -35,7 +35,7 @@ const WHEEL_LINE_PX = 40;
 const PIN_DRAG_START_PX = 4;
 /** ピンの上で左ボタンを押してからこれより短く離し、ほとんど動かさなければ、クリックとみなして入力カーソルを置く */
 const PIN_CLICK_MS = 300;
-/** 下段の文節をユーザー辞書に登録したときの知らせを出しておく時間。その間は左クリックで取り消せる */
+/** 候補の行の文節をユーザー辞書に登録したときの知らせを出しておく時間。その間は左クリックで取り消せる */
 const NOTICE_MS = 5000;
 /** 登録したときの知らせの、語の前と後ろ。語が長くて1行に収まらないときは、語の末尾だけを省略する */
 const REGISTERED_BEFORE = "ユーザ辞書に「";
@@ -142,12 +142,11 @@ export default function App() {
   const [mode, setMode] = useState<Mode>(loadMode);
   const modeRef = useRef(mode);
   const panelRef = useRef<HTMLDivElement>(null);
-  /** 上段（読み）の領域。ピンの位置の計算の基準 */
+  /** ひらがなと候補を並べる領域。ピンの位置の計算の基準 */
   const bodyRef = useRef<HTMLDivElement>(null);
-  /** 下段の各文節の要素。候補一覧の位置合わせに使う */
+  /** 各文節の候補の行の要素。候補一覧の位置合わせに使う */
   const resultRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const resultAreaRef = useRef<HTMLDivElement>(null);
-  /** 下段で右ボタンを押した文節と、今乗っている文節（文節の番号）。離したらその範囲を辞書に登録する */
+  /** 候補の行で右ボタンを押した文節と、今乗っている文節（文節の番号）。離したらその範囲を辞書に登録する */
   const [registerSel, setRegisterSelState] = useState<{ from: number; to: number } | null>(null);
   const registerSelRef = useRef(registerSel);
   const setRegisterSel = (r: { from: number; to: number } | null) => {
@@ -429,7 +428,7 @@ export default function App() {
   };
 
   /**
-   * 下段の文節を、今の表記のまま上段の読みに書き込む。「明るい」を書き込んでから「るい」を消し、
+   * 文節の候補を、今の表記のままひらがなの行（読み）に書き込む。「明るい」を書き込んでから「るい」を消し、
    * 読みを知らない「明」だけを残す使い方のため。書き込んだ漢字は貼り付けた漢字と同じく、そのまま変換を通る。
    * 区切りは変えずに変換し直し、書き込んだ文節は書き込んだ表記を選ぶ（「明るい」の「るい」が「類」にならないように）
    */
@@ -495,7 +494,7 @@ export default function App() {
   };
 
   /**
-   * 上段で左クリックした点に一番近い、入力カーソルを置ける位置。文字の上でなくても（行の右の余白や
+   * 左クリックした点に一番近い、入力カーソルを置ける位置。文字の上でなくても（行の右の余白や
    * 最後の行の下でも）、縦に一番近い行の中で横に一番近い文字の、近い側に置く
    */
   const caretFromPoint = (x: number, y: number) => {
@@ -752,23 +751,14 @@ export default function App() {
     return e.clientX < r.left + r.width / 2 ? pos : pos + 1;
   };
 
-  // 打ったり入力カーソルを動かしたりしたら、上段は入力カーソルを、下段はそれがある文節を見える範囲に入れる。
-  // 長い文で下段があふれると、最後の行（行末で折り返した句読点だけのことがある）が隠れたままになるため。
-  // 変換結果は打鍵より後に届くので、文節が変わったときにも合わせ直す
+  // 打ったり入力カーソルを動かしたりしたら、入力カーソルのある文節の箱（候補の行まで）を見える範囲に入れる。
+  // 長い文で最後の行が隠れたままにならないように。変換結果は打鍵より後に届くので、文節が変わったときにも合わせ直す。
+  // 候補をホイールで替えただけでは動かさない（スクロールして選んでいる文節から引き戻さない）
   useLayoutEffect(() => {
     const body = bodyRef.current;
     const caret = body?.querySelector<HTMLElement>(".caret");
-    if (body && caret) keepInView(body, caret);
-    const segs = session.segments;
-    const area = resultAreaRef.current;
-    if (!segs || segs.length === 0 || !area) return;
-    // 入力カーソルの直前の文字を含む文節。先頭にあるときは最初の文節、
-    // 打った文字の変換結果がまだ届かず文節より後ろにあるときは最後の文節
-    const found = segs.findIndex((seg) => seg.start < session.caret && session.caret <= seg.end);
-    const i = found >= 0 ? found : session.caret === 0 ? 0 : segs.length - 1;
-    const el = resultRefs.current[i];
-    if (el) keepInView(area, el);
-    // 候補をホイールで替えただけでは動かさない（スクロールして選んでいる文節から引き戻さない）
+    if (!body || !caret) return;
+    keepInView(body, caret.closest<HTMLElement>(".seg-block") ?? caret);
   }, [session.kana, session.caret, session.pending, session.segments?.map((seg) => seg.end).join()]);
 
   // 見た目は起動時に読んでおき、設定画面で変えたらイベントで受け取る
@@ -951,7 +941,7 @@ export default function App() {
     const noWheelScroll = (e: WheelEvent) => {
       e.preventDefault();
       if (!e.ctrlKey || !(e.target instanceof Element)) return;
-      // 上段・下段のうち、マウスがある方をスクロールする
+      // マウスがひらがなと候補の領域にあるときだけスクロールする
       const area = e.target.closest<HTMLElement>(".area");
       if (!area) return;
       const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? area.clientHeight : 1;
@@ -1007,11 +997,11 @@ export default function App() {
     </>
   );
 
-  /** 上段と下段で同じ文節を同じように強調する。下線の色は文節ごとに交互にし、上下の対応を見せる */
+  /** ひらがなの行と候補の行で、同じ文節を同じように強調する。下線の色は文節ごとに交互にし、文節の切れ目を見せる */
   const segClass = (i: number) =>
     "seg" + (i % 2 ? " odd" : "") + (listFor === i ? " active" : hover === i ? " hover" : "");
 
-  /** 下段の i〜j 番目の文節（逆順でもよい）を、今の候補のままユーザー辞書に登録する */
+  /** i〜j 番目の文節（逆順でもよい）を、今の候補のままユーザー辞書に登録する */
   const registerSegments = async (i: number, j: number) => {
     const segs = sessionRef.current.segments;
     if (!segs) return;
@@ -1034,18 +1024,18 @@ export default function App() {
     if (word) userDictionary.remove(word).catch((err) => showNotice(String(err), null));
   };
 
-  /** 下段で右ボタンを押したら、離したところまでの文節を登録する。動かさずに離したらその文節だけ */
+  /** 候補の行で右ボタンを押したら、離したところまでの文節を登録する。動かさずに離したらその文節だけ */
   const onResultRightDown = (i: number, e: React.PointerEvent) => {
     if (!isRightButton(e) || !sessionRef.current.segments) return;
     setRegisterSel({ from: i, to: i });
-    resultAreaRef.current?.setPointerCapture(e.pointerId);
+    bodyRef.current?.setPointerCapture(e.pointerId);
   };
 
   const onResultMove = (e: React.PointerEvent) => {
     const r = registerSelRef.current;
     if (!r) return;
     const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-seg]");
-    if (!el || !resultAreaRef.current?.contains(el)) return;
+    if (!el || !bodyRef.current?.contains(el)) return;
     const to = Number(el.dataset.seg);
     if (to !== r.to) setRegisterSel({ ...r, to });
   };
@@ -1060,7 +1050,7 @@ export default function App() {
   const registering = (i: number) =>
     registerSel !== null && Math.min(registerSel.from, registerSel.to) <= i && i <= Math.max(registerSel.from, registerSel.to);
 
-  /** 上段・下段の文節に共通のマウス操作 */
+  /** 文節の箱（ひらがなと候補の両方）のマウス操作 */
   const segHandlers = (i: number) => ({
     onWheel: (e: React.WheelEvent) => onWheel(i, e),
     onMouseEnter: () => setHover(i),
@@ -1099,14 +1089,21 @@ export default function App() {
       </div>
       <div className="panel" ref={panelRef} onPointerDown={startMove}>
         <div
-          className="area reading-area"
+          className="area"
           ref={bodyRef}
           onClick={onReadingClick}
-          onPointerMove={onRangeMove}
-          onPointerUp={onRangeUp}
+          onPointerMove={(e) => {
+            onRangeMove(e);
+            onResultMove(e);
+          }}
+          onPointerUp={() => {
+            onRangeUp();
+            onResultUp();
+          }}
           onPointerCancel={() => {
             pinPressRef.current = null;
             setRange(null);
+            setRegisterSel(null);
           }}
         >
           <div className="reading">
@@ -1128,9 +1125,29 @@ export default function App() {
                         onPointerUp={(e) => onPinUp(i - 1, e)}
                       />
                     )}
-                    <span className={segClass(i)} {...segHandlers(i)}>
-                      {chars(seg.reading, seg.start, i === segments.length - 1)}
-                    </span>
+                    {isLineBreak(seg) ? (
+                      // 改行は箱に入れず、そのまま行を改める
+                      chars(seg.reading, seg.start, i === segments.length - 1)
+                    ) : (
+                      // ひらがなと候補を縦に積んだ箱。箱は途中で折り返さないので、文節が行をまたがない
+                      <span className="seg-block" data-seg={i} {...segHandlers(i)}>
+                        <span className={segClass(i) + " seg-reading"}>
+                          {chars(seg.reading, seg.start, i === segments.length - 1)}
+                        </span>
+                        <span
+                          className={segClass(i) + " seg-candidate" + (registering(i) ? " register-select" : "")}
+                          ref={(el) => {
+                            resultRefs.current[i] = el;
+                          }}
+                          onPointerDown={(e) => onResultRightDown(i, e)}
+                          onDoubleClick={(e) => {
+                            if (e.button === 0) bake(i);
+                          }}
+                        >
+                          {seg.candidates[seg.selected]}
+                        </span>
+                      </span>
+                    )}
                   </Fragment>
                 ))
               : chars(session.kana, 0, true)}
@@ -1163,31 +1180,6 @@ export default function App() {
             </div>
           </div>
         )}
-        <div
-          className="area result-area"
-          ref={resultAreaRef}
-          onPointerMove={onResultMove}
-          onPointerUp={onResultUp}
-          onPointerCancel={() => setRegisterSel(null)}
-        >
-          {segments?.map((seg, i) => (
-            <span
-              key={`${seg.start}:${seg.end}`}
-              className={segClass(i) + (registering(i) ? " register-select" : "")}
-              data-seg={i}
-              ref={(el) => {
-                resultRefs.current[i] = el;
-              }}
-              onPointerDown={(e) => onResultRightDown(i, e)}
-              onDoubleClick={(e) => {
-                if (e.button === 0) bake(i);
-              }}
-              {...segHandlers(i)}
-            >
-              {seg.candidates[seg.selected]}
-            </span>
-          ))}
-        </div>
         {segments && listFor !== null && segments[listFor] && (
           <CandidateList segment={segments[listFor]} anchor={() => resultRefs.current[listFor]} />
         )}
@@ -1330,7 +1322,7 @@ function EnterIcon() {
   );
 }
 
-/** 下段の文節の下に出す候補一覧。下に入りきらなければ上に出す */
+/** 候補の行の文節の下に出す候補一覧。下に入りきらなければ上に出す */
 /**
  * 上の掴みどころ・余白・下の案内の欄を左ボタンで押さえたら、ウィンドウを動かす。
  * 文字の上はピンや文節の操作に使うので動かさない。動かした位置は隠すときに Rust 側で覚える
