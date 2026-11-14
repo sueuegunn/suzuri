@@ -212,23 +212,30 @@ body {
   color: var(--fg);
 }
 
-/* 矢印キーやクリックで動かした直後。太く光らせてから細い線に戻す。太くした分も負の余白で打ち消し、文字を動かさない */
+/* 矢印キーやクリックで動かした直後。縦に伸ばして光らせてから細い線に戻す。太くした分も負の余白で打ち消し、文字を動かさない */
 .caret.flash {
   animation:
     caret-flash 0.35s ease-out,
     blink 1s steps(1) 0.8s infinite;
 }
 
+/* 縦に伸ばして上下に光を出し、左右には滲ませない（負の広がりで横を細くし、上下にずらした影を重ねる） */
 @keyframes caret-flash {
   from {
-    width: 6px;
-    margin: 0 -3px;
-    box-shadow: 0 0 10px 2px var(--accent);
+    width: 4px;
+    margin: 0 -2px;
+    transform: scaleY(1.5);
+    box-shadow:
+      0 -8px 8px -3px var(--accent),
+      0 8px 8px -3px var(--accent);
   }
   to {
     width: 2px;
     margin: 0 -1px;
-    box-shadow: 0 0 0 0 var(--accent);
+    transform: scaleY(1);
+    box-shadow:
+      0 0 0 0 var(--accent),
+      0 0 0 0 var(--accent);
   }
 }
 
