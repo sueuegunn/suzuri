@@ -105,7 +105,7 @@ impl Engine {
                 }
                 let surface = e.surface.resolve(reading);
                 // 英字だけの略語（「いんたーちぇんじ」→「IC」）は、打っているかなから思い浮かべた語と違う
-                if surface.chars().all(|c| c.is_ascii()) {
+                if surface.is_ascii() {
                     continue;
                 }
                 if best.as_ref().is_none_or(|(c, _)| e.cost < *c) {

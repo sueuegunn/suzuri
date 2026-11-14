@@ -12,7 +12,6 @@
   --divider: #c7c7cc;
   --hover: rgba(0, 0, 0, 0.05);
   --active: rgba(0, 122, 255, 0.12);
-  /* 文節の下線。上下で同じ文節が同じ色になるよう、文節ごとに交互に使う */
   --popover: #ffffff;
   --popover-border: rgba(0, 0, 0, 0.08);
   --shadow: rgba(0, 0, 0, 0.16);
@@ -36,7 +35,7 @@
 }
 
 /* ダーク。トレイメニューの「外観」か OS の設定で、theme.ts が data-theme="dark" を付ける。
-   macOS の暗い外観に寄せ、下線とピンは同じ色相のまま暗い背景で沈まないよう明るくする */
+   macOS の暗い外観に寄せ、ピンは同じ色相のまま暗い背景で沈まないよう明るくする */
 :root[data-theme="dark"] {
   --bg: rgba(30, 30, 32, var(--bg-alpha));
   --fg: #d1d1d6;

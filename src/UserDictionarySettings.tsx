@@ -43,7 +43,7 @@ export default function UserDictionarySettings() {
         .then(setWords)
         .catch((e) => setMessage({ text: String(e), error: true }));
     load();
-    // 設定画面を開いたまま、オーバーレイの下段から登録・取り消しをしたときも一覧を読み直す
+    // 設定画面を開いたまま、オーバーレイの候補の行から登録・取り消しをしたときも一覧を読み直す
     const unlisten = listen("user-dictionary", load);
     return () => {
       unlisten.then((f) => f());
