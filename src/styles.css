@@ -13,8 +13,6 @@
   --hover: rgba(0, 0, 0, 0.05);
   --active: rgba(0, 122, 255, 0.12);
   /* 文節の下線。上下で同じ文節が同じ色になるよう、文節ごとに交互に使う */
-  --seg-line: rgba(0, 104, 214, 0.4);
-  --seg-line-odd: rgba(224, 131, 0, 0.5);
   --popover: #ffffff;
   --popover-border: rgba(0, 0, 0, 0.08);
   --shadow: rgba(0, 0, 0, 0.16);
@@ -46,8 +44,6 @@
   --divider: #48484a;
   --hover: rgba(255, 255, 255, 0.07);
   --active: rgba(10, 132, 255, 0.28);
-  --seg-line: rgba(64, 156, 255, 0.65);
-  --seg-line-odd: rgba(255, 159, 10, 0.65);
   --popover: #2c2c2e;
   --popover-border: rgba(255, 255, 255, 0.1);
   --shadow: rgba(0, 0, 0, 0.5);
@@ -127,7 +123,8 @@ body {
 .reading {
   /* 1行目のピンの頭が、上の英数・かなの切り替えに重ならないようにする */
   padding-top: 10px;
-  font-size: calc(24px * var(--text-scale));
+  /* ひらがなの行は候補の行（26px）より小さくし、見分けやすくする */
+  font-size: calc(20px * var(--text-scale));
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -150,7 +147,7 @@ body {
 }
 
 .seg-candidate {
-  font-size: calc(26 / 24 * 1em);
+  font-size: calc(26px * var(--text-scale));
   /* ひらがなの行と見分けるため、濃く太くする */
   color: var(--fg-strong);
   font-weight: bold;
@@ -159,23 +156,16 @@ body {
 
 .seg {
   border-radius: 4px;
-  /* 古い WebKit（macOS）は短縮形に太さを書くと全体を無視するので、個別に書く */
-  text-decoration-line: underline;
-  text-decoration-thickness: 2px;
-  text-decoration-color: var(--seg-line);
-  text-underline-offset: 6px;
-  text-decoration-skip-ink: none;
 }
 
-.seg.odd {
-  text-decoration-color: var(--seg-line-odd);
-}
-
-.seg.hover {
+/* マウスが乗っている行だけを強調する。ひらがなと候補は同じ箱で上下に並ぶので、もう一方まで強調しない */
+.seg-reading:hover,
+.seg-candidate:hover {
   background: var(--hover);
 }
 
-.seg.active {
+/* 候補一覧を出している文節 */
+.seg-candidate.active {
   background: var(--active);
 }
 

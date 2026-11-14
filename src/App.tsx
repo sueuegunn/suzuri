@@ -997,9 +997,8 @@ export default function App() {
     </>
   );
 
-  /** ひらがなの行と候補の行で、同じ文節を同じように強調する。下線の色は文節ごとに交互にし、文節の切れ目を見せる */
-  const segClass = (i: number) =>
-    "seg" + (i % 2 ? " odd" : "") + (listFor === i ? " active" : hover === i ? " hover" : "");
+  /** 候補一覧を出している文節に印を付ける。マウスが乗っている行の強調は CSS の :hover で行う */
+  const segClass = (i: number) => "seg" + (listFor === i ? " active" : "");
 
   /** i〜j 番目の文節（逆順でもよい）を、今の候補のままユーザー辞書に登録する */
   const registerSegments = async (i: number, j: number) => {
