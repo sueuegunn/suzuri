@@ -212,6 +212,26 @@ body {
   color: var(--fg);
 }
 
+/* 矢印キーやクリックで動かした直後。太く光らせてから細い線に戻す。幅と左右の余白の合計は変えず、文字を動かさない */
+.caret.flash {
+  animation:
+    caret-flash 0.35s ease-out,
+    blink 1s steps(1) 0.8s infinite;
+}
+
+@keyframes caret-flash {
+  from {
+    width: 6px;
+    margin: 0;
+    box-shadow: 0 0 10px 2px var(--accent);
+  }
+  to {
+    width: 2px;
+    margin: 0 2px;
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+}
+
 @keyframes blink {
   50% {
     opacity: 0;

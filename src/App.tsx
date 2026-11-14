@@ -140,6 +140,8 @@ export default function App() {
   };
   /** マウスを乗せている文節。F6〜F10 をこの文節に効かせる。強調は CSS の :hover で行うので、描き直さないよう ref だけに持つ */
   const hoverRef = useRef<number | null>(null);
+  /** 矢印キーやクリックで入力カーソルを動かした先と、動かした回数。その位置の入力カーソルを一瞬光らせる */
+  const [flash, setFlash] = useState<{ pos: number; n: number } | null>(null);
   /** 読みの末尾から探した続き（サジェスト）。どの読みに対して探したものかも持つ。Tab の処理から読むので ref にも持つ */
   const [suggestion, setSuggestionState] = useState<SuggestionFor | null>(null);
   const suggestionRef = useRef(suggestion);
@@ -276,6 +278,8 @@ export default function App() {
    * 変換済みなら直した文節だけ区切り直し、ほかの文節の区切りと選んだ候補は保つ
    */
   const edit = (old: Session, next: Session, pos: number, removed: number, inserted: number) => {
+    // 打ったり消したりしたときは光らせない（打つたびに光ると邪魔）
+    setFlash(null);
     if (next.kana === "") {
       update({ ...next, segments: null, pinned: [] });
       return;
@@ -496,9 +500,12 @@ export default function App() {
     );
   };
 
+  /** 矢印キーやクリックで入力カーソルを動かす。動かした先で入力カーソルを一瞬光らせ、見失わないようにする */
   const moveCaret = (to: (s: Session) => number) => {
     const s = settle(sessionRef.current);
-    update({ ...s, caret: Math.max(0, Math.min(length(s.kana), to(s))) });
+    const caret = Math.max(0, Math.min(length(s.kana), to(s)));
+    update({ ...s, caret });
+    setFlash((f) => ({ pos: caret, n: (f?.n ?? 0) + 1 }));
   };
 
   /** 手で区切りを変えたとき。`pinned` は手で決めた区切りの新しい一覧 */
@@ -1037,13 +1044,18 @@ export default function App() {
     };
   }, []);
 
-  const caretMark = (pos: number) =>
-    session.caret === pos && (
-      <span className="caret-wrap" key={`caret-${pos}`}>
+  // 入力カーソルは位置が変わるたびに作り直し、点滅を数え直す。矢印キーやクリックで動かしたときは、
+  // 同じ位置でも作り直して光らせ直す（端で押し続けたときも、押したことが分かるように）
+  const caretMark = (pos: number) => {
+    if (session.caret !== pos) return false;
+    const flashing = flash !== null && flash.pos === pos;
+    return (
+      <span className="caret-wrap" key={`caret-${pos}-${flashing ? flash.n : 0}`}>
         {session.pending && <span className="pending">{session.pending}</span>}
-        <span className="caret" />
+        <span className={"caret" + (flashing ? " flash" : "")} />
       </span>
     );
+  };
 
   const inRange = (pos: number) =>
     rangeSel !== null && pos >= Math.min(rangeSel.from, rangeSel.to) && pos < Math.max(rangeSel.from, rangeSel.to);
