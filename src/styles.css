@@ -758,7 +758,7 @@ body.settings-body {
   background: var(--active);
 }
 
-/* ユーザー辞書に登録したときの知らせ。下の案内の欄に重ね、常に1行だけ出す */
+/* ユーザー辞書に登録したときの知らせ。下の案内の欄のすぐ上に、常に1行だけ出す */
 .notice-anchor {
   position: relative;
   height: 0;
@@ -768,9 +768,10 @@ body.settings-body {
 .notice {
   position: absolute;
   left: 50%;
-  /* 案内の欄（上の余白 8px と、マウスの絵の高さ）の真ん中 */
-  top: 18px;
-  transform: translate(-50%, -50%);
+  /* 下の案内の欄のすぐ上に出す。案内の欄に重ねると、右下のモードの切り替えを押そうとして知らせを押し、
+     登録を取り消してしまうことがある */
+  top: -4px;
+  transform: translate(-50%, -100%);
   display: flex;
   align-items: center;
   max-width: calc(100% - 24px);
