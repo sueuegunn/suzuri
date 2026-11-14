@@ -209,9 +209,10 @@ body {
   padding: 0 5px;
   margin: 0 -5px;
   /* 箱と箱の間に、ひらがなの行の上の方から候補の行の下端まで立てる。1em はひらがなの文字の大きさ（22px）。
-     箱の高さは、ひらがなの行（1.6 行分）と候補の行（26px の 1.5 行分）を足したもの */
-  height: calc(1.6em + 26 / 22 * 1.5em - 0.15em);
-  margin-top: 0.15em;
+     箱の高さは、ひらがなの行（1.6 行分）と候補の行（26px の 1.5 行分）を足したもの。
+     上下を 4px ずつ縮め、行のまとまりを分断しないようにする（App.tsx のゴーストのピンも合わせる） */
+  height: calc(1.6em + 26 / 22 * 1.5em - 0.15em - 8px);
+  margin-top: calc(0.15em + 4px);
   vertical-align: top;
   cursor: ew-resize;
   touch-action: none;

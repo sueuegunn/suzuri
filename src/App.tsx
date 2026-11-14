@@ -685,9 +685,10 @@ export default function App() {
       const [prev, cur] = [chars[g - 1], chars[g]];
       const sameRow = Math.abs(prev.top - cur.top) < cur.height / 2;
       const x = sameRow ? (prev.right + cur.left) / 2 : cur.left;
-      // ゴーストのピンは本物のピンと同じく、文字の上端から候補の行の下端（文節の箱の下端）まで伸ばす
+      // ゴーストのピンは本物のピンと同じく、文字の上端から候補の行の下端（文節の箱の下端）の少し上まで伸ばす
+      // （本物のピンは下端から PIN_INSET_PX だけ縮めている。styles.css の .pin）
       const box = els[g].closest(".seg-block")?.getBoundingClientRect();
-      const bottom = box ? box.bottom : cur.bottom;
+      const bottom = box ? box.bottom - PIN_INSET_PX : cur.bottom;
       // ゴーストのピンを領域の中に置くので、領域の左上を原点にする
       gaps.set(g, { x: x - origin.left, y: cur.top - origin.top + body.scrollTop, height: bottom - cur.top });
     }
@@ -1342,6 +1343,9 @@ function startMove(e: React.PointerEvent<HTMLElement>) {
     .startDragging()
     .catch(() => {});
 }
+
+/** ピンを文節の箱の上下から縮める長さ（styles.css の .pin と合わせる） */
+const PIN_INSET_PX = 4;
 
 /** 掴みどころを2回押したとみなす間隔 */
 const DOUBLE_CLICK_MS = 400;
