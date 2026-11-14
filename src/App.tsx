@@ -1586,7 +1586,7 @@ const PANEL_RADIUS = 28;
 /** パネルの縁の線の太さ（styles.css の .panel の border） */
 const PANEL_BORDER = 2;
 /** 角の印の太さ。パネルの外側の輪郭から内側へ */
-const CORNER_THICKNESS = 5;
+const CORNER_THICKNESS = 4;
 
 /**
  * 大きさを変える角の印（左上の形。ほかの角は CSS で裏返す）。外側の輪郭はパネルの丸みのまま、内側にだけ太らせる。
