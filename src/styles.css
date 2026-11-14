@@ -24,8 +24,10 @@
   --error: #d93025;
   /* スクロールバーやつまみなど、ブラウザが描く部品の配色 */
   color-scheme: light;
-  /* 文節の区切りのピン。文節の下線（青・オレンジ）とも文字のグレーとも見分けられる赤紫（Okabe-Ito の配色） */
+  /* 文節の区切りのピン。入力カーソルの青と見分けられ、暗い背景でも沈まないオレンジ */
   --pin: #e08300;
+  /* パネルの縁の線と、大きさを変える掴みどころの印。明るい背景では暗いグレー */
+  --panel-border: #6e6e73;
   /* 英数字は読みやすい Verdana（Windows・macOS とも標準）。Verdana にない日本語は、
      仮名も漢字も同じ幅の正方形に収まる等幅の書体で出す。
      BIZ UDゴシックは Windows 10 以降に標準で入っている。macOS は Osaka−等幅 */
@@ -48,6 +50,8 @@
   --popover-border: rgba(255, 255, 255, 0.1);
   --shadow: rgba(0, 0, 0, 0.5);
   --pin: #ff9f0a;
+  /* 暗い背景では明るいグレー */
+  --panel-border: #aeaeb2;
   --grabber: #636366;
   --hint: #aeaeb2;
   --window-bg: #1c1c1e;
@@ -85,8 +89,7 @@ body {
   visibility: hidden;
 }
 
-/* 縁から 12px かけて透明へ溶かす。影を重ねるのではなくパネル自体の不透明度を変えるので、
-   不透明な部分との境目ができない。不透明度は端でなだらかに変わる曲線にしている */
+/* パネル。縁にはグレーの線を引く（ライトは暗いグレー、ダークは明るいグレー） */
 .panel {
   position: relative;
   box-sizing: border-box;
@@ -95,12 +98,8 @@ body {
   flex-direction: column;
   padding: 28px 32px 18px;
   background: var(--bg);
+  border: 1px solid var(--panel-border);
   border-radius: 28px;
-  /* 横方向と縦方向のぼかしを重ね、角も丸く溶けるようにする */
-  mask-image:
-    linear-gradient(to right, transparent 0, rgba(0, 0, 0, 0.15) 3px, rgba(0, 0, 0, 0.5) 6px, rgba(0, 0, 0, 0.85) 9px, #000 12px, #000 calc(100% - 12px), rgba(0, 0, 0, 0.85) calc(100% - 9px), rgba(0, 0, 0, 0.5) calc(100% - 6px), rgba(0, 0, 0, 0.15) calc(100% - 3px), transparent 100%),
-    linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, 0.15) 3px, rgba(0, 0, 0, 0.5) 6px, rgba(0, 0, 0, 0.85) 9px, #000 12px, #000 calc(100% - 12px), rgba(0, 0, 0, 0.85) calc(100% - 9px), rgba(0, 0, 0, 0.5) calc(100% - 6px), rgba(0, 0, 0, 0.15) calc(100% - 3px), transparent 100%);
-  mask-composite: intersect;
 }
 
 /* ひらがなと候補を並べる領域。はみ出したら縦にスクロールする。
@@ -409,7 +408,9 @@ body {
   background: var(--accent);
 }
 
-/* 大きさを変える掴みどころ。外の余白（8px）と縁のぼかしの内側 10px にまたがる */
+/* 大きさを変える掴みどころ。外の余白（8px）とパネルの縁の内側 10px にまたがる。
+   縁の上に印を描く（::after）。角は幅と高さの両方を変えられるので、いつも太い弧を出す。
+   辺は幅か高さの一方だけなので、マウスを乗せたときだけ辺に沿って太い線を出す。乗せた掴みどころは青にする */
 .resize {
   position: absolute;
   z-index: 2;
@@ -451,6 +452,69 @@ body {
 .resize.se { bottom: 0; right: 0; cursor: nwse-resize; }
 .resize.ne { top: 0; right: 0; cursor: nesw-resize; }
 .resize.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+.resize::after {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* 辺の印。パネルの縁（外から 8px）に重ね、角の弧とは重ならないようにする */
+.resize.n::after,
+.resize.s::after {
+  left: 8px;
+  right: 8px;
+  height: 3px;
+}
+.resize.n::after { top: 7px; }
+.resize.s::after { bottom: 7px; }
+
+.resize.w::after,
+.resize.e::after {
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+}
+.resize.w::after { left: 7px; }
+.resize.e::after { right: 7px; }
+
+.resize.n::after,
+.resize.s::after,
+.resize.w::after,
+.resize.e::after {
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+}
+
+.resize.n:hover::after,
+.resize.s:hover::after,
+.resize.w:hover::after,
+.resize.e:hover::after {
+  opacity: 1;
+}
+
+/* 角の印。パネルの角の丸み（半径 28px）に沿った太い弧 */
+.resize.nw::after,
+.resize.ne::after,
+.resize.sw::after,
+.resize.se::after {
+  width: 30px;
+  height: 30px;
+  border: 0 solid var(--panel-border);
+}
+.resize.nw::after { top: 7px; left: 7px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 30px; }
+.resize.ne::after { top: 7px; right: 7px; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 30px; }
+.resize.sw::after { bottom: 7px; left: 7px; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 30px; }
+.resize.se::after { bottom: 7px; right: 7px; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 30px; }
+
+.resize.nw:hover::after,
+.resize.ne:hover::after,
+.resize.sw:hover::after,
+.resize.se:hover::after {
+  border-color: var(--accent);
+}
 
 .footer {
   display: flex;
