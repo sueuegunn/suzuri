@@ -56,6 +56,12 @@ describe("carrySelections", () => {
     ];
     expect(carrySelections(prev, next).map((s) => s.selected)).toEqual([2, 0]);
   });
+  it("第1候補のままだった文節は、新しい順の第1候補にする", () => {
+    // 前の文節が変わって学習の順が入れ替わっても、前の第1候補を2番目として選んだままにしない
+    const prev = [seg(0, 3, "でもの", ["出物", "デモの"])];
+    const next = [{ start: 0, end: 3, reading: "でもの", candidates: ["デモの", "出物"] }];
+    expect(carrySelections(prev, next).map((s) => s.selected)).toEqual([0]);
+  });
 });
 
 describe("clampPin", () => {

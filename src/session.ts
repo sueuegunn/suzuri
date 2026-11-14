@@ -140,6 +140,8 @@ export function shiftPosition(x: number, pos: number, removed: number, inserted:
 /**
  * 新しい変換結果に、前の選択を引き継ぐ。
  * 範囲と読みが変わらない文節は、前に選んでいた表記を選んだままにする。
+ * 第1候補のままだった文節は引き継がない。学習で候補の順が変わったとき（前の文節が変わって
+ * 文脈つきの学習が効くなど）に、新しい第1候補ではなく前の第1候補が2番目以降として選ばれたまま残るため
  * `shift` は前の文節の位置を新しい位置に読み替える関数（ひらがなを直したとき用）
  */
 export function carrySelections(
@@ -149,6 +151,7 @@ export function carrySelections(
 ): Segment[] {
   const chosen = new Map<string, string>();
   for (const s of previous ?? []) {
+    if (s.selected === 0) continue;
     chosen.set(`${shift(s.start)}:${shift(s.end)}:${s.reading}`, s.candidates[s.selected]);
   }
   return next.map((s) => {
