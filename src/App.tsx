@@ -194,12 +194,13 @@ export default function App() {
     previous: Segment[] | null,
     call: Promise<EngineSegment[]>,
     shift?: (pos: number) => number,
+    adjust: (segments: Segment[]) => Segment[] = (x) => x,
   ) => {
     const id = ++requestRef.current;
     const segments = await call;
     const cur = sessionRef.current;
     if (id !== requestRef.current || cur.kana !== reading) return;
-    update({ ...cur, segments: carrySelections(previous, segments, shift) });
+    update({ ...cur, segments: adjust(carrySelections(previous, segments, shift)) });
   };
 
   /**
@@ -413,6 +414,35 @@ export default function App() {
     const segments = s.segments.map((x, i) => (i === index ? { ...x, candidates, selected } : x));
     update({ ...s, segments });
     setListFor(index);
+  };
+
+  /**
+   * 下段の文節を、今の表記のまま上段の読みに書き込む。「明るい」を書き込んでから「るい」を消し、
+   * 読みを知らない「明」だけを残す使い方のため。書き込んだ漢字は貼り付けた漢字と同じく、そのまま変換を通る。
+   * 区切りは変えずに変換し直し、書き込んだ文節は書き込んだ表記を選ぶ（「明るい」の「るい」が「類」にならないように）
+   */
+  const bake = (index: number) => {
+    const s = sessionRef.current;
+    const seg = s.segments?.[index];
+    // 打ちかけのローマ字があると、文節の位置が読みとずれるので何もしない
+    if (!s.segments || !seg || s.pending !== "") return;
+    const surface = seg.candidates[seg.selected];
+    if (surface === seg.reading) return;
+    const removed = seg.end - seg.start;
+    const inserted = length(surface);
+    const shift = (x: number) => shiftPosition(x, seg.start, removed, inserted);
+    const kana = splice(s.kana, seg.start, removed, surface);
+    const boundaries = boundariesOf(s.segments).map(shift);
+    retypeRef.current = null;
+    update({ ...s, kana, caret: seg.start + inserted, pinned: s.pinned.map(shift) });
+    run(kana, s.segments, engine.convertWithBoundaries(kana, boundaries), shift, (segments) =>
+      segments.map((x) => {
+        if (x.start !== seg.start || x.reading !== surface) return x;
+        const found = x.candidates.indexOf(surface);
+        const candidates = found < 0 ? [...x.candidates, surface] : x.candidates;
+        return { ...x, candidates, selected: found < 0 ? candidates.length - 1 : found };
+      }),
+    );
   };
 
   const moveCaret = (to: (s: Session) => number) => {
@@ -1126,6 +1156,9 @@ export default function App() {
                 resultRefs.current[i] = el;
               }}
               onPointerDown={(e) => onResultRightDown(i, e)}
+              onDoubleClick={(e) => {
+                if (e.button === 0) bake(i);
+              }}
               {...segHandlers(i)}
             >
               {seg.candidates[seg.selected]}
