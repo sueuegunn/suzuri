@@ -198,10 +198,13 @@ body {
   display: inline-block;
   width: 2px;
   height: 1.1em;
-  margin: 0 -1px;
+  /* 左右の文字と 2px ずつ離し、文字に埋もれないようにする */
+  margin: 0 2px;
   vertical-align: text-bottom;
   background: var(--accent);
-  animation: blink 1s steps(1) infinite;
+  /* 動かした直後は点滅させず、見失わないようにする。入力カーソルの位置が変わるたびに要素を作り直すので、
+     打ったり動かしたりするたびに、点いたまま 0.8 秒待ってから点滅し始める */
+  animation: blink 1s steps(1) 0.8s infinite;
 }
 
 .pending {
