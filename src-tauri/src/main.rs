@@ -279,7 +279,6 @@ fn main() {
             commands::register_segment,
             commands::center_overlay,
             commands::suggest,
-            commands::debug_log,
             commands::read_clipboard,
         ])
         .run(tauri::generate_context!())

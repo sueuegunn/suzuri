@@ -52,6 +52,7 @@
 
 [Releases](https://github.com/sueuegunn/suzuri/releases) から、Windows は `Suzuri_*_x64-setup.exe`、macOS は `Suzuri_*_universal.dmg` を取ってください。
 どちらも署名していないため、初回の起動で警告が出ます。進め方は各リリースの説明に書いています。
+macOS で貼り付けモードを使うには、システム設定の「アクセシビリティ」で Suzuri を許可してください。
 
 ## ビルド
 
@@ -59,18 +60,13 @@ Rust（stable）と Node.js が必要です。
 
 ```sh
 npm install
-# Mozc の辞書を取得してバイナリ辞書を作る（初回と、辞書の形式が変わったとき。取得元のコミットとハッシュ値は固定している）
+# Mozc の辞書を取得してバイナリ辞書を作る（初回のみ。取得元のコミットとハッシュ値は固定している）
 cargo run -p suzuri-dictgen --release
 # 開発モードで起動
 npx tauri dev
 # 配布用にビルド
 npx tauri build
 ```
-
-## 状態
-
-- Windows で動作を確かめています
-- macOS は未確認です。ショートカットは仮で、貼り付けモードにはアクセシビリティの許可が必要です
 
 仕様と構成は [docs/design.md](docs/design.md) にあります。
 

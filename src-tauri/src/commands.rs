@@ -379,12 +379,6 @@ pub fn read_clipboard(app: AppHandle) -> String {
 }
 
 /// オーバーレイを今いるモニターの中央に戻す（掴みどころのダブルクリック）
-/// 画面側から調べるためのログを標準エラーに出す（tauri dev のターミナルに出る）
-#[tauri::command]
-pub fn debug_log(message: String) {
-    eprintln!("[overlay] {message}");
-}
-
 #[tauri::command]
 pub fn center_overlay(app: AppHandle) {
     overlay::center(&app);

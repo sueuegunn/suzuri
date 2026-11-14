@@ -89,17 +89,14 @@ type Summon = {
 
 const IS_MAC = navigator.userAgent.includes("Mac");
 
-/**
- * 次の描画が終わるのを待つ。描画が止まっているときに待ち続けないよう、長くても 50ms で打ち切る。
- * 描画の通知（rAF）で抜けたら "raf"、打ち切ったら "timeout" を返す
- */
-function afterPaint(): Promise<"raf" | "timeout"> {
+/** 次の描画が終わるのを待つ。描画が止まっているときに待ち続けないよう、長くても 50ms で打ち切る */
+function afterPaint(): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve("timeout"), 50);
+    const timer = setTimeout(resolve, 50);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         clearTimeout(timer);
-        resolve("raf");
+        resolve();
       }),
     );
   });
@@ -246,8 +243,7 @@ export default function App() {
     setRegisterSel(null);
     hideNotice();
     setShown(false);
-    // 消し終えてから隠せたかを確かめるため、描画の通知で抜けたか打ち切ったかを残す（macOS の調査用）
-    return afterPaint().then((how) => engine.debugLog(`close: ${how}`));
+    return afterPaint();
   };
 
   const cancel = (returnFocus: boolean) => {
@@ -889,10 +885,9 @@ export default function App() {
       const id = ++summonRef.current;
       setShown(false);
       // 新しい状態を描き、ウィンドウの移動が反映されるまでもう1フレーム待ってから見せる
-      afterPaint().then((how) => {
+      afterPaint().then(() => {
         if (id !== summonRef.current || closedRef.current) return;
         setShown(true);
-        engine.debugLog(`show: ${how}`);
       });
       update(e.payload.mode === "previous" ? previousRef.current : emptySession);
       inputModeRef.current = e.payload.input;
