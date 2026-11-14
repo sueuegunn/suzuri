@@ -590,11 +590,16 @@ body.settings-body {
 
 .user-word {
   display: grid;
-  grid-template-columns: 1fr 1fr auto auto;
+  grid-template-columns: 1fr 1fr auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 6px 0;
   border-bottom: 1px solid var(--divider);
+}
+
+/* 書き換え中の行。入力欄が縮んでボタンを押し出さないようにする */
+.user-word.editing input {
+  width: 100%;
 }
 
 .user-word span {

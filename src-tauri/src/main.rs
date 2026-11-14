@@ -273,6 +273,7 @@ fn main() {
             commands::set_keep_pasted_in_clipboard,
             commands::list_user_words,
             commands::add_user_word,
+            commands::update_user_word,
             commands::remove_user_word,
             commands::register_segment,
             commands::center_overlay,

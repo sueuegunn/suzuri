@@ -12,6 +12,20 @@ const POS_OPTIONS: { value: UserPos; title: string }[] = [
 
 const posTitle = (pos: UserPos) => POS_OPTIONS.find((o) => o.value === pos)?.title ?? pos;
 
+const wordKey = (w: UserWord) => `${w.reading}	${w.surface}	${w.pos}`;
+
+function PosSelect({ value, onChange }: { value: UserPos; onChange: (pos: UserPos) => void }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value as UserPos)} aria-label="品詞">
+      {POS_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.title}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** 設定画面の「ユーザー辞書」タブ。語を登録すると、変換で1語として出やすくなる */
 export default function UserDictionarySettings() {
   const [words, setWords] = useState<UserWord[] | null>(null);
@@ -19,6 +33,8 @@ export default function UserDictionarySettings() {
   const [surface, setSurface] = useState("");
   const [pos, setPos] = useState<UserPos>("noun");
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  /** 書き換えている語と、書き換えかけの内容。一度に1語だけ */
+  const [editing, setEditing] = useState<{ old: UserWord; word: UserWord } | null>(null);
 
   useEffect(() => {
     const load = () =>
@@ -41,6 +57,18 @@ export default function UserDictionarySettings() {
       setReading("");
       setSurface("");
     } catch (e) {
+      setMessage({ text: String(e), error: true });
+    }
+  };
+
+  const save = async () => {
+    if (!editing) return;
+    try {
+      setWords(await userDictionary.update(editing.old, editing.word));
+      setMessage({ text: `「${editing.word.surface.trim()}」に書き換えました`, error: false });
+      setEditing(null);
+    } catch (e) {
+      // 書き換えかけの内容は残し、直してもう一度保存できるようにする
       setMessage({ text: String(e), error: true });
     }
   };
@@ -70,13 +98,7 @@ export default function UserDictionarySettings() {
           aria-label="読み"
         />
         <input placeholder="表記" value={surface} onChange={(e) => setSurface(e.target.value)} aria-label="表記" />
-        <select value={pos} onChange={(e) => setPos(e.target.value as UserPos)} aria-label="品詞">
-          {POS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.title}
-            </option>
-          ))}
-        </select>
+        <PosSelect value={pos} onChange={setPos} />
         <button type="submit" disabled={words === null}>
           登録
         </button>
@@ -88,16 +110,53 @@ export default function UserDictionarySettings() {
         {words
           ?.slice()
           .reverse()
-          .map((w) => (
-            <div className="user-word" key={`${w.reading}\t${w.surface}\t${w.pos}`}>
-              <span className="user-word-surface">{w.surface}</span>
-              <span className="user-word-reading">{w.reading}</span>
-              <span className="user-word-pos">{posTitle(w.pos)}</span>
-              <button onClick={() => remove(w)} aria-label={`${w.surface} を消す`}>
-                消す
-              </button>
-            </div>
-          ))}
+          .map((w) =>
+            editing && wordKey(editing.old) === wordKey(w) ? (
+              <form
+                className="user-word editing"
+                key={wordKey(w)}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  save();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setEditing(null);
+                }}
+              >
+                <input
+                  value={editing.word.surface}
+                  onChange={(e) => setEditing({ ...editing, word: { ...editing.word, surface: e.target.value } })}
+                  aria-label="表記"
+                  autoFocus
+                />
+                <input
+                  value={editing.word.reading}
+                  onChange={(e) => setEditing({ ...editing, word: { ...editing.word, reading: e.target.value } })}
+                  aria-label="読み"
+                />
+                <PosSelect
+                  value={editing.word.pos}
+                  onChange={(pos) => setEditing({ ...editing, word: { ...editing.word, pos } })}
+                />
+                <button type="submit">保存</button>
+                <button type="button" onClick={() => setEditing(null)}>
+                  やめる
+                </button>
+              </form>
+            ) : (
+              <div className="user-word" key={wordKey(w)}>
+                <span className="user-word-surface">{w.surface}</span>
+                <span className="user-word-reading">{w.reading}</span>
+                <span className="user-word-pos">{posTitle(w.pos)}</span>
+                <button onClick={() => setEditing({ old: w, word: { ...w } })} aria-label={`${w.surface} を書き換える`}>
+                  編集
+                </button>
+                <button onClick={() => remove(w)} aria-label={`${w.surface} を消す`}>
+                  消す
+                </button>
+              </div>
+            ),
+          )}
       </div>
     </div>
   );

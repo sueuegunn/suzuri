@@ -134,6 +134,25 @@ impl UserDictionary {
         true
     }
 
+    /// 登録した語 `old` を書き換える。一覧の位置（登録した順）は保つ。返すのは書き換えた語。
+    /// ほかの登録済みの語と同じになるとき、`old` が見つからないときは失敗する
+    pub fn replace(&mut self, old: &UserWord, reading: &str, surface: &str, pos: UserPos) -> Result<UserWord, UserDictError> {
+        let word = UserWord {
+            reading: normalize_reading(reading)?,
+            surface: normalize_surface(surface)?,
+            pos,
+        };
+        let Some(i) = self.words.iter().position(|w| w == old) else {
+            return Err(UserDictError::Invalid("書き換える語が見つかりません".into()));
+        };
+        if self.words.iter().enumerate().any(|(j, w)| j != i && *w == word) {
+            return Err(UserDictError::Invalid("同じ語がすでに登録されています".into()));
+        }
+        self.words[i] = word.clone();
+        self.reindex();
+        Ok(word)
+    }
+
     /// 登録や削除は設定画面から人の手で行うので、そのたびに作り直しても間に合う
     fn reindex(&mut self) {
         self.by_reading.clear();
@@ -240,6 +259,27 @@ mod tests {
         assert!(d.add("よみ", "", UserPos::Noun).is_err());
         assert!(d.add("よみ", "改\n行", UserPos::Noun).is_err());
         assert!(d.add("npm", "npm", UserPos::Noun).is_ok());
+    }
+
+    #[test]
+    fn replaces_in_place() {
+        let mut d = UserDictionary::new();
+        let a = d.add("すずり", "スズリ", UserPos::Noun).unwrap();
+        let b = d.add("たなか", "田中", UserPos::Person).unwrap();
+        // 位置を保ち、読みの表も引き直す
+        let a2 = d.replace(&a, "スズリン", "スズリン", UserPos::Organization).unwrap();
+        assert_eq!(a2.reading, "すずりん");
+        assert_eq!(d.words()[0], a2);
+        assert!(d.lookup("すずり").is_empty());
+        assert_eq!(d.lookup("すずりん").len(), 1);
+        assert_eq!(d.max_chars(), 4);
+        // 変えないまま保存してもよい
+        assert!(d.replace(&b, "たなか", "田中", UserPos::Person).is_ok());
+        // ほかの語と重なる・元の語がない・読みが正しくないときは変えない
+        assert!(d.replace(&b, "すずりん", "スズリン", UserPos::Organization).is_err());
+        assert!(d.replace(&a, "すずり", "硯", UserPos::Noun).is_err());
+        assert!(d.replace(&a2, "漢字", "漢字", UserPos::Noun).is_err());
+        assert_eq!(d.words(), &[a2, b]);
     }
 
     #[test]
