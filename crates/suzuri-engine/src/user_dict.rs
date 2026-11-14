@@ -2,6 +2,7 @@
 //!
 //! 変換中は読みで引くハッシュ表だけを見る。ファイルの読み書きは呼び出し側が変換の外で行う。
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -104,9 +105,15 @@ impl UserDictionary {
         self.max_chars
     }
 
-    /// 読みが完全に一致する語の番号
+    /// 読みが完全に一致する語の番号。英字の大文字・小文字は区別しない（「npm」で登録した語を Shift で打った「NPM」でも引く）。
+    /// 小文字にそろえた読みを渡せば、文字列を作り直さない
     pub fn lookup(&self, reading: &str) -> &[u32] {
-        self.by_reading.get(reading).map_or(&[], Vec::as_slice)
+        let key = if reading.bytes().any(|b| b.is_ascii_uppercase()) {
+            Cow::Owned(reading.to_ascii_lowercase())
+        } else {
+            Cow::Borrowed(reading)
+        };
+        self.by_reading.get(key.as_ref()).map_or(&[], Vec::as_slice)
     }
 
     /// 語を登録する。読みのカタカナはひらがなにそろえる。返すのは登録した語
@@ -157,7 +164,7 @@ impl UserDictionary {
     fn reindex(&mut self) {
         self.by_reading.clear();
         for (i, w) in self.words.iter().enumerate() {
-            self.by_reading.entry(w.reading.clone()).or_default().push(i as u32);
+            self.by_reading.entry(w.reading.to_ascii_lowercase()).or_default().push(i as u32);
         }
         self.max_chars = self.words.iter().map(|w| w.reading.chars().count()).max().unwrap_or(0);
     }
@@ -200,10 +207,16 @@ impl UserDictionary {
     }
 }
 
-/// 読みをそろえて確かめる。前後の空白を除き、カタカナをひらがなにする。
-/// 打った読みに出てくる文字（ひらがな・「ー」・英数字）だけを受け付ける
+/// 読みをそろえて確かめる。前後の空白を除き、カタカナをひらがなに、全角英数字を半角にする（設定画面で IME が
+/// 全角のまま打っても登録できるように）。打った読みに出てくる文字（ひらがな・「ー」・英数字）だけを受け付ける
 fn normalize_reading(reading: &str) -> Result<String, UserDictError> {
-    let reading = katakana_to_hiragana(reading.trim());
+    let reading: String = katakana_to_hiragana(reading.trim())
+        .chars()
+        .map(|c| match c {
+            'Ａ'..='Ｚ' | 'ａ'..='ｚ' | '０'..='９' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+            _ => c,
+        })
+        .collect();
     if reading.is_empty() {
         return Err(UserDictError::Invalid("読みを入れてください".into()));
     }
@@ -212,7 +225,7 @@ fn normalize_reading(reading: &str) -> Result<String, UserDictError> {
     }
     let ok = |c: char| matches!(c, 'ぁ'..='ゖ' | 'ー') || c.is_ascii_alphanumeric();
     if !reading.chars().all(ok) {
-        return Err(UserDictError::Invalid("読みはひらがなで入れてください".into()));
+        return Err(UserDictError::Invalid("読みはひらがなと英数字で入れてください".into()));
     }
     Ok(reading)
 }
@@ -259,6 +272,19 @@ mod tests {
         assert!(d.add("よみ", "", UserPos::Noun).is_err());
         assert!(d.add("よみ", "改\n行", UserPos::Noun).is_err());
         assert!(d.add("npm", "npm", UserPos::Noun).is_ok());
+    }
+
+    #[test]
+    fn accepts_alphanumeric_readings() {
+        let mut d = UserDictionary::new();
+        // 全角は半角にそろえ、大文字・小文字は区別せずに引く
+        assert_eq!(d.add("ｎｐｍ", "npm", UserPos::Noun).unwrap().reading, "npm");
+        assert_eq!(d.lookup("NPM").len(), 1);
+        assert_eq!(d.lookup("npm").len(), 1);
+        assert_eq!(d.add("Tしゃつ", "Tシャツ", UserPos::Noun).unwrap().reading, "Tしゃつ");
+        assert_eq!(d.lookup("tしゃつ").len(), 1);
+        assert_eq!(d.add("mp３", "MP3", UserPos::Noun).unwrap().reading, "mp3");
+        assert!(d.add("c++", "C++", UserPos::Noun).is_err());
     }
 
     #[test]

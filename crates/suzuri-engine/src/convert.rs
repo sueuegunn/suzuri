@@ -221,6 +221,8 @@ impl Engine {
         let mut by_end = vec![Vec::new(); n + 1];
         let unknown = self.dict.unknown_id();
         let chars: Vec<char> = reading.chars().collect();
+        // ユーザー辞書は英字の大文字・小文字を区別せずに引く。ASCII だけ小文字にするのでバイト位置は変わらない
+        let folded = reading.to_ascii_lowercase();
         for start in 0..n {
             let mut push = |node: Node| {
                 by_start[node.start].push(nodes.len());
@@ -277,7 +279,7 @@ impl Engine {
             // ユーザー辞書と区切りの学習は、それぞれ一番長い読みまで、長さごとに引く
             let dictionary = &user.dictionary;
             for end in start + 1..=n.min(start + dictionary.max_chars()) {
-                for &i in dictionary.lookup(&reading[offsets[start]..offsets[end]]) {
+                for &i in dictionary.lookup(&folded[offsets[start]..offsets[end]]) {
                     let id = self.dict.user_pos_id(dictionary.word(i).pos);
                     push(Node {
                         start,
@@ -758,6 +760,16 @@ mod tests {
         user.dictionary.add("はし", "ハシ社", UserPos::Noun).unwrap();
         let c = e.convert_with_boundaries("はし", &[], &user);
         assert_eq!(&c.segments[0].candidates[..3], ["ハシ社", "橋", "箸"]);
+    }
+
+    #[test]
+    fn user_word_with_alphabet_ignores_case() {
+        let e = engine();
+        let mut user = UserData::default();
+        user.dictionary.add("npm", "エヌピーエム", UserPos::Noun).unwrap();
+        // Shift で打った大文字の読みでも引く
+        let c = e.convert_with_boundaries("NPM", &[], &user);
+        assert_eq!(c.segments[0].candidates[0], "エヌピーエム");
     }
 
     #[test]
