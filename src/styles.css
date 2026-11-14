@@ -219,21 +219,23 @@ body {
     blink 1s steps(1) 0.8s infinite;
 }
 
-/* 縦に伸ばして上下に光を出し、左右には滲ませない（負の広がりで横を細くし、上下にずらした影を重ねる） */
+/* 全体に弱く滲ませ、上下にずらした影を重ねて縦にだけ強く滲ませる。縦にも少し伸ばす */
 @keyframes caret-flash {
   from {
     width: 4px;
     margin: 0 -2px;
-    transform: scaleY(1.5);
+    transform: scaleY(1.3);
     box-shadow:
-      0 -8px 8px -3px var(--accent),
-      0 8px 8px -3px var(--accent);
+      0 0 6px 1px var(--accent),
+      0 -10px 10px -2px var(--accent),
+      0 10px 10px -2px var(--accent);
   }
   to {
     width: 2px;
     margin: 0 -1px;
     transform: scaleY(1);
     box-shadow:
+      0 0 0 0 var(--accent),
       0 0 0 0 var(--accent),
       0 0 0 0 var(--accent);
   }
