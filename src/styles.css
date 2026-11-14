@@ -221,17 +221,26 @@ body {
     blink 1s steps(1) 0.8s infinite;
 }
 
-/* 光らせる間だけ、少し太く、縦にも少し伸ばす */
+/* 光らせる間だけ、少し太く、縦にも少し伸ばす。入力カーソルのまわりにも影で滲ませ（全体に弱く、上下にずらした影で
+   縦に強く）、楕円の滲み（::after）との境目を目立たなくする */
 @keyframes caret-flash {
   from {
     width: 4px;
     margin: 0 -2px;
     transform: scaleY(1.3);
+    box-shadow:
+      0 0 6px 1px var(--accent),
+      0 -10px 10px -2px var(--accent),
+      0 10px 10px -2px var(--accent);
   }
   to {
     width: 2px;
     margin: 0 -1px;
     transform: scaleY(1);
+    box-shadow:
+      0 0 0 0 var(--accent),
+      0 0 0 0 var(--accent),
+      0 0 0 0 var(--accent);
   }
 }
 
