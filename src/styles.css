@@ -25,7 +25,7 @@
   /* スクロールバーやつまみなど、ブラウザが描く部品の配色 */
   color-scheme: light;
   /* 文節の区切りのピン。文節の下線（青・オレンジ）とも文字のグレーとも見分けられる赤紫（Okabe-Ito の配色） */
-  --pin: #cc79a7;
+  --pin: #e08300;
   /* 英数字は読みやすい Verdana（Windows・macOS とも標準）。Verdana にない日本語は、
      仮名も漢字も同じ幅の正方形に収まる等幅の書体で出す。
      BIZ UDゴシックは Windows 10 以降に標準で入っている。macOS は Osaka−等幅 */
@@ -47,7 +47,7 @@
   --popover: #2c2c2e;
   --popover-border: rgba(255, 255, 255, 0.1);
   --shadow: rgba(0, 0, 0, 0.5);
-  --pin: #e08dbd;
+  --pin: #ff9f0a;
   --grabber: #636366;
   --hint: #aeaeb2;
   --window-bg: #1c1c1e;
@@ -212,8 +212,9 @@ body {
   width: 12px;
   padding: 0 5px;
   margin: 0 -5px;
-  /* 箱と箱の間で、ひらがなの行の高さにだけ立てる */
-  height: 1.3em;
+  /* 箱と箱の間に、ひらがなの行の上の方から候補の行の下端まで立てる。1em はひらがなの文字の大きさ（22px）。
+     箱の高さは、ひらがなの行（1.6 行分）と候補の行（26px の 1.5 行分）を足したもの */
+  height: calc(1.6em + 26 / 22 * 1.5em - 0.15em);
   margin-top: 0.15em;
   vertical-align: top;
   cursor: ew-resize;
