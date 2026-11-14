@@ -170,6 +170,12 @@ fn main() {
             t.elapsed()
         );
     }
+    // 続き（サジェスト）は打つたびに探すので、学習とユーザー辞書が上限まで溜まった状態で測る
+    for s in SENTENCES {
+        let t = Instant::now();
+        suzuri_engine::suggest::suggest(s, &full);
+        println!("続きの予測（{}文字）: {:?}", s.chars().count(), t.elapsed());
+    }
     let t = Instant::now();
     let text = full.history.serialize();
     println!("学習の書き出し: {:?}（{} KB）", t.elapsed(), text.len() / 1024);

@@ -67,6 +67,25 @@ fn to_dto(c: Conversion) -> Vec<SegmentDto> {
         .collect()
 }
 
+/// 続きの候補（画面とのやりとり用）
+#[derive(Serialize)]
+pub struct SuggestionDto {
+    matched: usize,
+    reading: String,
+    surface: String,
+}
+
+/// 読みの末尾から、ユーザー辞書の語や学習した語の続きを1つ探す。なければ None
+#[tauri::command(async)]
+pub fn suggest(state: State<'_, AppState>, reading: String) -> Option<SuggestionDto> {
+    let user = state.user.lock().unwrap();
+    suzuri_engine::suggest::suggest(&reading, &user).map(|s| SuggestionDto {
+        matched: s.matched,
+        reading: s.reading,
+        surface: s.surface,
+    })
+}
+
 #[tauri::command(async)]
 pub fn convert(state: State<'_, AppState>, reading: String) -> Vec<SegmentDto> {
     let user = state.user.lock().unwrap();

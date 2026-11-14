@@ -18,6 +18,9 @@ export type UserPos = "noun" | "person" | "place" | "organization";
 
 export type UserWord = { reading: string; surface: string; pos: UserPos };
 
+/** 続きの候補。読みの末尾の matched 文字が、語の読み reading の先頭と一致した */
+export type Suggestion = { matched: number; reading: string; surface: string };
+
 /** ユーザー辞書の読み書き。追加と削除は、変えたあとの一覧（登録した順）を返す */
 export const userDictionary = {
   list: () => invoke<UserWord[]>("list_user_words"),
@@ -32,6 +35,8 @@ export const userDictionary = {
 
 export const engine = {
   convert: (reading: string) => invoke<EngineSegment[]>("convert", { reading }),
+  /** 読みの末尾から、ユーザー辞書の語や学習した語の続きを1つ探す */
+  suggest: (reading: string) => invoke<Suggestion | null>("suggest", { reading }),
   convertWithBoundaries: (reading: string, boundaries: number[]) =>
     invoke<EngineSegment[]>("convert_with_boundaries", { reading, boundaries }),
   resegment: (reading: string, boundaries: number[], start: number, end: number) =>

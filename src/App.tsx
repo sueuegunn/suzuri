@@ -2,7 +2,15 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
-import { applyAppearance, engine, settings, userDictionary, type Appearance, type UserWord } from "./engine";
+import {
+  applyAppearance,
+  engine,
+  settings,
+  userDictionary,
+  type Appearance,
+  type Suggestion,
+  type UserWord,
+} from "./engine";
 import { applyFunctionKey, isFunctionKey, type FunctionKey } from "./kana";
 import { feed, flush } from "./romaji";
 import {
@@ -132,6 +140,13 @@ export default function App() {
   };
   /** マウスを乗せている文節。F6〜F10 をこの文節に効かせる。強調は CSS の :hover で行うので、描き直さないよう ref だけに持つ */
   const hoverRef = useRef<number | null>(null);
+  /** 読みの末尾から探した続き（サジェスト）。どの読みに対して探したものかも持つ。Tab の処理から読むので ref にも持つ */
+  const [suggestion, setSuggestionState] = useState<SuggestionFor | null>(null);
+  const suggestionRef = useRef(suggestion);
+  const setSuggestion = (sg: SuggestionFor | null) => {
+    suggestionRef.current = sg;
+    setSuggestionState(sg);
+  };
   /** 上の掴みどころ・入力モードの切り替えのどれにマウスが乗っているか。乗っている間は、左下の案内をその使い方に替える */
   const [topHover, setTopHover] = useState<"grabber" | "input" | null>(null);
   /** 呼び出すたびに、呼び出し元の IME に合わせて決め直す */
@@ -454,6 +469,33 @@ export default function App() {
     );
   };
 
+  /**
+   * 出ている続き（サジェスト）を採る。読みの末尾に続きのかなを足し、一致した部分から末尾までを1文節にして
+   * 続きの語の表記を選ぶ。続きが出ていなければ何もしない
+   */
+  const acceptSuggestion = () => {
+    const s = sessionRef.current;
+    const sg = visibleSuggestion(s, suggestionRef.current);
+    if (!sg || !s.segments) return;
+    const rest = Array.from(sg.reading).slice(sg.matched).join("");
+    const start = length(s.kana) - sg.matched;
+    const kana = s.kana + rest;
+    const end = length(kana);
+    // 一致した部分の内側の区切りは外し、先頭で区切る
+    const boundaries = [...boundariesOf(s.segments).filter((b) => b < start), ...(start > 0 ? [start] : [])];
+    retypeRef.current = null;
+    setSuggestion(null);
+    update({ ...s, kana, caret: end, pinned: s.pinned.filter((p) => p <= start) });
+    run(kana, s.segments, engine.convertWithBoundaries(kana, boundaries), undefined, (segments) =>
+      segments.map((x) => {
+        if (x.start !== start || x.end !== end) return x;
+        const found = x.candidates.indexOf(sg.surface);
+        const candidates = found < 0 ? [...x.candidates, sg.surface] : x.candidates;
+        return { ...x, candidates, selected: found < 0 ? candidates.length - 1 : found };
+      }),
+    );
+  };
+
   const moveCaret = (to: (s: Session) => number) => {
     const s = settle(sessionRef.current);
     update({ ...s, caret: Math.max(0, Math.min(length(s.kana), to(s))) });
@@ -764,6 +806,22 @@ export default function App() {
     keepInView(body, caret.closest<HTMLElement>(".seg-block") ?? caret);
   }, [session.kana, session.caret, session.pending, session.segments?.map((seg) => seg.end).join()]);
 
+  // 入力カーソルが末尾にあるあいだ、読みが変わるたびに続き（サジェスト）を探す。
+  // 結果が届いた時点で読みが変わっていたら捨てる
+  useEffect(() => {
+    const kana = session.kana;
+    if (kana === "" || session.pending !== "" || session.caret !== length(kana)) {
+      setSuggestion(null);
+      return;
+    }
+    engine
+      .suggest(kana)
+      .then((sg) => {
+        if (sessionRef.current.kana === kana) setSuggestion(sg && { ...sg, kana });
+      })
+      .catch(() => setSuggestion(null));
+  }, [session.kana, session.caret, session.pending]);
+
   // 見た目は起動時に読んでおき、設定画面で変えたらイベントで受け取る
   useEffect(() => {
     settings.getAppearance().then(applyAppearance);
@@ -788,6 +846,7 @@ export default function App() {
     moveVertical,
     toggleMode,
     setInputMode,
+    acceptSuggestion,
   });
   handlers.current = {
     type,
@@ -804,6 +863,7 @@ export default function App() {
     moveVertical,
     toggleMode,
     setInputMode,
+    acceptSuggestion,
   };
 
   useEffect(() => {
@@ -872,7 +932,8 @@ export default function App() {
           else h.commit();
           break;
         case "Tab":
-          h.toggleMode();
+          // 続き（サジェスト）を採る。確定のモードの切り替えは右下を押して行う
+          h.acceptSuggestion();
           break;
         case " ":
           // 打つそばから変換していて Space で変換することはないので、Space は半角スペースを入れる。
@@ -1073,6 +1134,7 @@ export default function App() {
   });
 
   const segments = session.segments;
+  const shownSuggestion = visibleSuggestion(session, suggestion);
   return (
     <div className={"frame" + (shown ? "" : " concealed")}>
       <ResizeHandles />
@@ -1157,6 +1219,16 @@ export default function App() {
                   </Fragment>
                 ))
               : chars(session.kana, 0, true)}
+            {shownSuggestion && segments && (
+              // 続き（サジェスト）。最後の文節の後ろに、足すかなと語の表記を薄く出す。Tab で採る
+              <span className="seg-block suggestion">
+                <span className="seg seg-reading">
+                  {Array.from(shownSuggestion.reading).slice(shownSuggestion.matched).join("")}
+                  <span className="suggestion-key">Tab</span>
+                </span>
+                <span className="seg seg-candidate">{shownSuggestion.surface}</span>
+              </span>
+            )}
           </div>
           {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
         </div>
@@ -1214,10 +1286,16 @@ export default function App() {
               "Esc: 閉じる"
             )}
           </div>
-          <div className={"mode " + mode}>
+          {/* 押してもフォーカスを取らない（Enter や Space が押したことにならないように） */}
+          <button
+            className={"mode " + mode}
+            tabIndex={-1}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={toggleMode}
+          >
             <EnterIcon /> {mode === "paste" ? "貼り付け" : "コピー"}
-            <span className="mode-key">Tab で切り替え</span>
-          </div>
+            <span className="mode-key">クリックで切り替え</span>
+          </button>
         </div>
       </div>
     </div>
@@ -1291,6 +1369,15 @@ function isRightButton(e: React.PointerEvent) {
   return e.button === 2 || (IS_MAC && e.button === 0 && e.ctrlKey);
 }
 
+/** どの読みに対して探したかを添えた続き（サジェスト） */
+type SuggestionFor = Suggestion & { kana: string };
+
+/** 続き（サジェスト）を出せるか。入力カーソルが末尾にあり、打ちかけのローマ字がなく、探したときから読みが変わっていないときだけ */
+function visibleSuggestion(s: Session, sg: SuggestionFor | null): SuggestionFor | null {
+  if (!sg || !s.segments || sg.kana !== s.kana || s.pending !== "" || s.caret !== length(s.kana)) return null;
+  return sg;
+}
+
 /** 改行だけの文節か。改行は空白と同じく、それだけで1文節になる */
 function isLineBreak(seg: Segment) {
   return seg.reading === "\n";
@@ -1338,6 +1425,8 @@ function startMove(e: React.PointerEvent<HTMLElement>) {
   if (e.button !== 0) return;
   const target = e.target as HTMLElement;
   if (target !== e.currentTarget && !target.closest(".footer")) return;
+  // 右下の確定のモードは押して切り替えるので、動かさない
+  if (target.closest(".mode")) return;
   e.preventDefault();
   getCurrentWindow()
     .startDragging()

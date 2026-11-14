@@ -114,6 +114,13 @@ impl UserHistory {
         self.len = self.entries.values().map(Vec::len).sum();
     }
 
+    /// 覚えている (読み, 表記, 最後に使った時刻)。順は決まっていない
+    pub fn entries(&self) -> impl Iterator<Item = (&str, &str, u64)> {
+        self.entries
+            .iter()
+            .flat_map(|(r, list)| list.iter().map(move |(s, t)| (r.as_str(), s.as_str(), *t)))
+    }
+
     /// 覚えている表記を、新しく使った順に候補の先頭へ移す
     pub fn rank(&self, reading: &str, candidates: &mut Vec<String>) {
         let Some(list) = self.entries.get(reading) else { return };

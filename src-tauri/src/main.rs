@@ -278,6 +278,7 @@ fn main() {
             commands::remove_user_word,
             commands::register_segment,
             commands::center_overlay,
+            commands::suggest,
             commands::debug_log,
             commands::read_clipboard,
         ])

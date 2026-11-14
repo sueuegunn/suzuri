@@ -8,6 +8,7 @@ pub mod dict;
 pub mod history;
 pub mod kana;
 pub mod learned;
+pub mod suggest;
 pub mod user_dict;
 
 pub use convert::{CommitSegment, Conversion, Engine, Segment};

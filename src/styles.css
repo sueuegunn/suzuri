@@ -142,6 +142,24 @@ body {
   margin-bottom: 14px;
 }
 
+/* 続き（サジェスト）。最後の文節の後ろに、足すかなと語の表記を薄く出す */
+.seg-block.suggestion {
+  align-items: flex-start;
+  margin-left: 4px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* 続きを採るキーの印 */
+.suggestion-key {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
 /* 最後の文節（ふつうは打っている文節）は左にそろえる。中央だと、打つたびに文字が左右に動いて見づらい */
 .seg-block.last {
   align-items: flex-start;
@@ -437,10 +455,14 @@ body {
 .mode {
   flex: none;
   padding: 2px 10px;
+  border: 0;
   border-radius: 10px;
+  font-family: inherit;
   font-size: 13px;
   color: #ffffff;
   background: #0068d6;
+  /* 押して確定のモードを切り替える */
+  cursor: pointer;
 }
 
 /* 貼り付けは別のアプリに文字を入れるので、コピーと色で見分けられるようにする */
