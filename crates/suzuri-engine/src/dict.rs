@@ -457,6 +457,26 @@ impl Dictionary {
         }
     }
 
+    /// 読みが `prefix` で始まる語を、読みの辞書順に `limit` 個の読みまで渡す。
+    /// 渡すのは (読み, 単語の番号の範囲)。続きの予測（suggest）で、打ちかけの語を補うのに使う
+    pub fn predictive_search(&self, prefix: &str, limit: usize, mut f: impl FnMut(&str, Range<u32>)) {
+        use fst::{Automaton, IntoStreamer, Streamer};
+        let aut = fst::automaton::Str::new(prefix).starts_with();
+        let mut stream = self.index.search(aut).into_stream();
+        let mut seen = 0;
+        while let Some((key, out)) = stream.next() {
+            if seen == limit {
+                break;
+            }
+            seen += 1;
+            // 読みは辞書を作るときに UTF-8 の文字列から入れている
+            let Ok(reading) = std::str::from_utf8(key) else { continue };
+            let v = out.value();
+            let start = (v >> 16) as u32;
+            f(reading, start..start + (v & 0xffff) as u32);
+        }
+    }
+
     /// 読みが完全に一致する単語を返す
     pub fn lookup(&self, reading: &str) -> Vec<Entry<'_>> {
         let mut found = Vec::new();

@@ -142,17 +142,15 @@ body {
   margin-bottom: 14px;
 }
 
-/* 続き（サジェスト）。最後の文節の後ろに、足すかなと語の表記を薄く出す */
-.seg-block.suggestion {
-  align-items: flex-start;
-  margin-left: 4px;
+/* 打っている語の続き（サジェスト）。最後の文節の中に、足すかなと語の表記を薄く出す */
+.suggestion {
   opacity: 0.4;
-  pointer-events: none;
 }
 
 /* 続きを採るキーの印 */
 .suggestion-key {
   margin-left: 6px;
+  opacity: 0.5;
   padding: 0 4px;
   border: 1px solid currentColor;
   border-radius: 4px;

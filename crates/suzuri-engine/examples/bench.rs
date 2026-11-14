@@ -170,11 +170,13 @@ fn main() {
             t.elapsed()
         );
     }
-    // 続き（サジェスト）は打つたびに探すので、学習とユーザー辞書が上限まで溜まった状態で測る
+    // 続き（サジェスト）は打つたびに探すので、学習とユーザー辞書が上限まで溜まった状態で測る。
+    // 語の始まりは末尾の3文字・4文字前（システム辞書を引き始める長さ）にする
     for s in SENTENCES {
+        let n = s.chars().count();
         let t = Instant::now();
-        suzuri_engine::suggest::suggest(s, &full);
-        println!("続きの予測（{}文字）: {:?}", s.chars().count(), t.elapsed());
+        engine.suggest(s, &[n - 3, n - 4], &full);
+        println!("続きの予測（{}文字）: {:?}", n, t.elapsed());
     }
     let t = Instant::now();
     let text = full.history.serialize();

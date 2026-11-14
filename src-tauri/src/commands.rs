@@ -75,11 +75,11 @@ pub struct SuggestionDto {
     surface: String,
 }
 
-/// 読みの末尾から、ユーザー辞書の語や学習した語の続きを1つ探す。なければ None
+/// 打っている語の続きを1つ探す。`starts` は語が始まりうる位置（最後の文節とその1つ前の文節の先頭）。なければ None
 #[tauri::command(async)]
-pub fn suggest(state: State<'_, AppState>, reading: String) -> Option<SuggestionDto> {
+pub fn suggest(state: State<'_, AppState>, reading: String, starts: Vec<usize>) -> Option<SuggestionDto> {
     let user = state.user.lock().unwrap();
-    suzuri_engine::suggest::suggest(&reading, &user).map(|s| SuggestionDto {
+    state.engine.suggest(&reading, &starts, &user).map(|s| SuggestionDto {
         matched: s.matched,
         reading: s.reading,
         surface: s.surface,

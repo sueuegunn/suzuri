@@ -806,21 +806,31 @@ export default function App() {
     keepInView(body, caret.closest<HTMLElement>(".seg-block") ?? caret);
   }, [session.kana, session.caret, session.pending, session.segments?.map((seg) => seg.end).join()]);
 
-  // 入力カーソルが末尾にあるあいだ、読みが変わるたびに続き（サジェスト）を探す。
-  // 結果が届いた時点で読みが変わっていたら捨てる
+  // 入力カーソルが末尾にあるあいだ、打っている語の続き（サジェスト）を探す。語の始まりは、最後の文節の先頭と、
+  // 打っている途中で割れていることがあるので1つ前の文節の先頭（「アニメ｜ー」）。区切りは変換結果で決まるので、
+  // 変換結果が届いて文節が読みの末尾までそろってから探す。結果が届いた時点で読みが変わっていたら捨てる
   useEffect(() => {
     const kana = session.kana;
-    if (kana === "" || session.pending !== "" || session.caret !== length(kana)) {
+    const segs = session.segments;
+    const last = segs?.[segs.length - 1];
+    if (!segs || !last || session.pending !== "" || session.caret !== length(kana) || last.end !== length(kana)) {
       setSuggestion(null);
       return;
     }
+    // 空白や改行のあとは、新しい語を打ち始めていない
+    const words = segs.slice(-2).filter((seg) => !/^\s+$/.test(seg.reading));
+    if (words.length === 0 || words[words.length - 1] !== last) {
+      setSuggestion(null);
+      return;
+    }
+    const starts = words.map((seg) => seg.start).reverse();
     engine
-      .suggest(kana)
+      .suggest(kana, starts)
       .then((sg) => {
         if (sessionRef.current.kana === kana) setSuggestion(sg && { ...sg, kana });
       })
       .catch(() => setSuggestion(null));
-  }, [session.kana, session.caret, session.pending]);
+  }, [session.kana, session.caret, session.pending, session.segments?.map((seg) => seg.end).join()]);
 
   // 見た目は起動時に読んでおき、設定画面で変えたらイベントで受け取る
   useEffect(() => {
@@ -1134,7 +1144,7 @@ export default function App() {
   });
 
   const segments = session.segments;
-  const shownSuggestion = visibleSuggestion(session, suggestion);
+  const ghost = suggestionGhost(session, suggestion);
   return (
     <div className={"frame" + (shown ? "" : " concealed")}>
       <ResizeHandles />
@@ -1201,6 +1211,12 @@ export default function App() {
                       >
                         <span className="seg seg-reading">
                           {chars(seg.reading, seg.start, i === segments.length - 1)}
+                          {i === segments.length - 1 && ghost && (
+                            <>
+                              <span className="suggestion">{ghost.rest}</span>
+                              <span className="suggestion-key">Tab</span>
+                            </>
+                          )}
                         </span>
                         <span
                           className={candidateClass(i)}
@@ -1212,23 +1228,20 @@ export default function App() {
                             if (e.button === 0) bake(i);
                           }}
                         >
-                          {seg.candidates[seg.selected]}
+                          {i === segments.length - 1 && ghost?.replace ? (
+                            <span className="suggestion">{ghost.surface}</span>
+                          ) : (
+                            seg.candidates[seg.selected]
+                          )}
+                          {i === segments.length - 1 && ghost && !ghost.replace && (
+                            <span className="suggestion">{ghost.surfaceRest}</span>
+                          )}
                         </span>
                       </span>
                     )}
                   </Fragment>
                 ))
               : chars(session.kana, 0, true)}
-            {shownSuggestion && segments && (
-              // 続き（サジェスト）。最後の文節の後ろに、足すかなと語の表記を薄く出す。Tab で採る
-              <span className="seg-block suggestion">
-                <span className="seg seg-reading">
-                  {Array.from(shownSuggestion.reading).slice(shownSuggestion.matched).join("")}
-                  <span className="suggestion-key">Tab</span>
-                </span>
-                <span className="seg seg-candidate">{shownSuggestion.surface}</span>
-              </span>
-            )}
           </div>
           {drag && <div className="ghost-pin" style={{ left: drag.x, top: drag.y, height: drag.height }} />}
         </div>
@@ -1376,6 +1389,27 @@ type SuggestionFor = Suggestion & { kana: string };
 function visibleSuggestion(s: Session, sg: SuggestionFor | null): SuggestionFor | null {
   if (!sg || !s.segments || sg.kana !== s.kana || s.pending !== "" || s.caret !== length(s.kana)) return null;
   return sg;
+}
+
+/**
+ * 打っている語の続きを、最後の文節の中に薄く出す内容。ひらがなの行には足すかな（rest）を出す。
+ * 候補の行は、語の表記が今の候補で始まり、続きの語が最後の文節の先頭から始まるときは足す部分（surfaceRest）だけを、
+ * そうでなければ語の表記で今の候補を置き換えて（replace）出す
+ */
+function suggestionGhost(s: Session, sg: SuggestionFor | null) {
+  const shown = visibleSuggestion(s, sg);
+  const last = s.segments?.[s.segments.length - 1];
+  if (!shown || !last) return null;
+  const rest = Array.from(shown.reading).slice(shown.matched).join("");
+  const candidate = last.candidates[last.selected];
+  const fromLast = length(s.kana) - shown.matched === last.start;
+  const extends_ = fromLast && shown.surface.startsWith(candidate);
+  return {
+    rest,
+    surface: shown.surface,
+    surfaceRest: extends_ ? shown.surface.slice(candidate.length) : shown.surface,
+    replace: fromLast && !extends_,
+  };
 }
 
 /** 改行だけの文節か。改行は空白と同じく、それだけで1文節になる */
