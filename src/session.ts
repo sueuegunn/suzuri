@@ -1,5 +1,7 @@
 // 入力中の文の状態と、その操作。描画やエンジンの呼び出しを含まない純粋な処理だけを置く。
 
+import { feed, isRomajiPrefix } from "./romaji";
+
 /** エンジンが返す文節 */
 export type EngineSegment = {
   start: number;
@@ -24,9 +26,15 @@ export type Session = {
   segments: Segment[] | null;
   /** ユーザーが手で置いた・動かした区切り。打っている途中に区切り直さない */
   pinned: number[];
+  /**
+   * かなモードで打ったが、かなにならずに英字のまま読みに入った文字の位置（小さい順）。
+   * あとでその直後に英字を打つと、打ちかけのローマ字に戻して合わせる。
+   * 英数モードや Shift で打った英字、貼り付けた英字は含めず、ほかの英字と合わせない
+   */
+  romaji: number[];
 };
 
-export const emptySession: Session = { kana: "", caret: 0, pending: "", segments: null, pinned: [] };
+export const emptySession: Session = { kana: "", caret: 0, pending: "", segments: null, pinned: [], romaji: [] };
 
 export function length(text: string): number {
   return Array.from(text).length;
@@ -180,4 +188,41 @@ export function splice(text: string, pos: number, removed: number, inserted: str
   const chars = Array.from(text);
   chars.splice(pos, removed, ...Array.from(inserted));
   return chars.join("");
+}
+
+/** 文字位置 `pos` から `removed` 文字を消し、`inserted` 文字を入れたあとの、英字のまま残ったローマ字の位置 */
+export function shiftRomaji(marks: number[], pos: number, removed: number, inserted: number): number[] {
+  return marks.filter((x) => x < pos || x >= pos + removed).map((x) => (x < pos ? x : x - removed + inserted));
+}
+
+/** `text` を文字位置 `pos` に入れたときの、その中の英字の位置。かなモードで英字のまま残ったローマ字に印を付ける */
+export function romajiLetters(text: string, pos: number): number[] {
+  return Array.from(text).flatMap((c, i) => (/^[a-z]$/.test(c) ? [pos + i] : []));
+}
+
+/** 印を足した、英字のまま残ったローマ字の位置 */
+export function addRomaji(marks: number[], added: number[]): number[] {
+  return added.length === 0 ? marks : [...new Set([...marks, ...added])].sort((a, b) => a - b);
+}
+
+/** かなモードで1文字打ったときの、読みの書き換え。`pos` から `removed` 文字を `kana` に置き換える */
+export type RomajiEdit = { pos: number; removed: number; kana: string; pending: string };
+
+/**
+ * かなモードで1文字打ったときの読みの書き換え。入力カーソルの直前に英字のまま残ったローマ字があれば、
+ * 打ちかけのローマ字の頭に戻して打った文字と合わせる（「k」が残ったあとで a を打つと「か」）。
+ * 合わさらないとき（「k」のあとに「x」）は戻さない
+ */
+export function typeRomaji(s: Session, ch: string): RomajiEdit {
+  const chars = Array.from(s.kana);
+  let run = 0;
+  while (run < s.caret && s.romaji.includes(s.caret - run - 1)) run++;
+  for (let k = run; k > 0; k--) {
+    const head = chars.slice(s.caret - k, s.caret).join("");
+    if (!isRomajiPrefix(head + s.pending)) continue;
+    const r = feed(head + s.pending, ch, chars[s.caret - k - 1]);
+    if (r.kana.startsWith(head)) continue;
+    return { pos: s.caret - k, removed: k, ...r };
+  }
+  return { pos: s.caret, removed: 0, ...feed(s.pending, ch, chars[s.caret - 1]) };
 }

@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { carrySelections, clampPin, mergeRange, rangeAround, retypeRange, shiftBoundaries, splice } from "./session";
+import {
+  carrySelections,
+  clampPin,
+  emptySession,
+  mergeRange,
+  rangeAround,
+  retypeRange,
+  shiftBoundaries,
+  shiftRomaji,
+  splice,
+  typeRomaji,
+} from "./session";
 
 describe("shiftBoundaries", () => {
   it("adds text typed at a boundary to the left segment", () => {
@@ -104,5 +115,38 @@ describe("mergeRange", () => {
 
   it("空の範囲なら null", () => {
     expect(mergeRange(bs, [], 3, 3, 10)).toBeNull();
+  });
+});
+
+describe("typeRomaji", () => {
+  const at = (kana: string, romaji: number[], pending = "") => ({
+    ...emptySession,
+    kana,
+    caret: Array.from(kana).length,
+    pending,
+    romaji,
+  });
+  it("joins a letter left by kana mode with the next letter", () => {
+    // 「k」が英字のまま残ったあとで a を打つ
+    expect(typeRomaji(at("あk", [1]), "a")).toEqual({ pos: 1, removed: 1, kana: "か", pending: "" });
+    expect(typeRomaji(at("あk", [1]), "y")).toEqual({ pos: 1, removed: 1, kana: "", pending: "ky" });
+    expect(typeRomaji(at("k", [0]), "k")).toEqual({ pos: 0, removed: 1, kana: "っ", pending: "k" });
+  });
+  it("joins several letters left by kana mode", () => {
+    expect(typeRomaji(at("ky", [0, 1]), "o")).toEqual({ pos: 0, removed: 2, kana: "きょ", pending: "" });
+  });
+  it("keeps letters that do not join", () => {
+    expect(typeRomaji(at("k", [0]), "x")).toEqual({ pos: 1, removed: 0, kana: "", pending: "x" });
+  });
+  it("never joins letters typed in alphanumeric mode", () => {
+    expect(typeRomaji(at("k", []), "a")).toEqual({ pos: 1, removed: 0, kana: "あ", pending: "" });
+    // 英数モードの「k」のあとに、かなモードの「y」が残っている
+    expect(typeRomaji(at("ky", [1]), "a")).toEqual({ pos: 1, removed: 1, kana: "や", pending: "" });
+  });
+});
+
+describe("shiftRomaji", () => {
+  it("drops removed letters and shifts later ones", () => {
+    expect(shiftRomaji([0, 2, 5], 2, 1, 3)).toEqual([0, 7]);
   });
 });

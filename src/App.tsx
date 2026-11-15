@@ -12,8 +12,9 @@ import {
   type UserWord,
 } from "./engine";
 import { applyFunctionKey, isFunctionKey, type FunctionKey } from "./kana";
-import { feed, flush } from "./romaji";
+import { flush } from "./romaji";
 import {
+  addRomaji,
   boundariesOf,
   carrySelections,
   clampPin,
@@ -22,9 +23,12 @@ import {
   mergeRange,
   retypeRange,
   resultText,
+  romajiLetters,
   shiftBoundaries,
   shiftPosition,
+  shiftRomaji,
   splice,
+  typeRomaji,
   type EngineSegment,
   type Segment,
   type Session,
@@ -104,11 +108,12 @@ function afterPaint(): Promise<void> {
 
 type Drag = { pin: number; target: number; x: number; y: number; height: number };
 
-/** 未確定のローマ字をカーソル位置に確定させる */
+/** 未確定のローマ字をカーソル位置に確定させる。英字のまま入れた分は、あとで続きを打てば合わさる */
 function settle(s: Session): Session {
   const text = flush(s.pending);
   if (text === "") return s;
-  return { ...s, kana: splice(s.kana, s.caret, 0, text), caret: s.caret + length(text), pending: "" };
+  const romaji = addRomaji(shiftRomaji(s.romaji, s.caret, 0, length(text)), romajiLetters(text, s.caret));
+  return { ...s, kana: splice(s.kana, s.caret, 0, text), caret: s.caret + length(text), pending: "", romaji };
 }
 
 export default function App() {
@@ -271,11 +276,13 @@ export default function App() {
 
   /**
    * ひらがなを直したら、打つそばから変換する（ライブ変換）。
-   * 変換済みなら直した文節だけ区切り直し、ほかの文節の区切りと選んだ候補は保つ
+   * 変換済みなら直した文節だけ区切り直し、ほかの文節の区切りと選んだ候補は保つ。
+   * `romaji` は入れた文字のうち、かなモードで打って英字のまま残ったものの位置
    */
-  const edit = (old: Session, next: Session, pos: number, removed: number, inserted: number) => {
+  const edit = (old: Session, next: Session, pos: number, removed: number, inserted: number, romaji: number[] = []) => {
     // 打ったり消したりしたときは光らせない（打つたびに光ると邪魔）
     setFlash(null);
+    next = { ...next, romaji: addRomaji(shiftRomaji(old.romaji, pos, removed, inserted), romaji) };
     if (next.kana === "") {
       update({ ...next, segments: null, pinned: [] });
       return;
@@ -302,25 +309,34 @@ export default function App() {
   };
 
   /**
-   * 直前の打鍵で打ちかけのローマ字が確定したときの、打つ前の状態と打ったあとの状態。
+   * 直前の打鍵で打ちかけのローマ字が確定したときの、打つ前の状態と打ったあとの状態と、読みの書き換え。
    * 次の Backspace でその打鍵だけを取り消し、前後の打鍵をつなげる（t k BS u → つ、n k BS a → な）
    */
-  const retypeRef = useRef<{ before: Session; after: Session } | null>(null);
+  const retypeRef = useRef<{
+    before: Session;
+    after: Session;
+    pos: number;
+    removed: number;
+    inserted: number;
+  } | null>(null);
 
   const type = (ch: string) => {
     const s = sessionRef.current;
-    const r = feed(s.pending, ch, Array.from(s.kana)[s.caret - 1]);
+    // 直前に英字のまま残ったローマ字があれば、それも合わせる
+    const r = typeRomaji(s, ch);
+    const { pos, removed } = r;
+    const inserted = length(r.kana);
+    const kana = splice(s.kana, pos, removed, r.kana);
+    const romaji = addRomaji(shiftRomaji(s.romaji, pos, removed, inserted), romajiLetters(r.kana, pos));
+    const next = { ...s, kana, caret: pos + inserted, pending: r.pending, romaji };
     // 打った文字が打ちかけのローマ字として残っているときだけ。「ka」で「か」になったあとの BS は「か」を消す
-    const kana = splice(s.kana, s.caret, 0, r.kana);
-    const after = { ...s, kana, caret: s.caret + length(r.kana), pending: r.pending };
-    retypeRef.current = s.pending !== "" && r.pending !== "" ? { before: s, after } : null;
-    if (r.kana === "") {
-      update({ ...s, pending: r.pending });
+    const wasPending = s.pending !== "" || removed > 0;
+    retypeRef.current = wasPending && r.pending !== "" ? { before: s, after: next, pos, removed, inserted } : null;
+    if (removed === 0 && inserted === 0) {
+      update(next);
       return;
     }
-    const inserted = length(r.kana);
-    const next = { ...s, kana: splice(s.kana, s.caret, 0, r.kana), caret: s.caret + inserted, pending: r.pending };
-    edit(s, next, s.caret, 0, inserted);
+    edit(s, next, pos, removed, inserted, romajiLetters(r.kana, pos));
   };
 
   /** 入力モードを変える。打ちかけのローマ字は、そのまま確定させてから切り替える */
@@ -345,12 +361,13 @@ export default function App() {
    */
   const typeLetter = (ch: string) => {
     const s = sessionRef.current;
-    // 打ちかけのローマ字は先に確定させる
-    const text = flush(s.pending) + ch;
+    // 打ちかけのローマ字は先に確定させる。英字のまま入れた分は、あとで続きを打てば合わさる
+    const settled = flush(s.pending);
+    const text = settled + ch;
     if (text === "") return;
     const inserted = length(text);
     const next = { ...s, kana: splice(s.kana, s.caret, 0, text), caret: s.caret + inserted, pending: "" };
-    edit(s, next, s.caret, 0, inserted);
+    edit(s, next, s.caret, 0, inserted, romajiLetters(settled, s.caret));
   };
 
   const backspace = () => {
@@ -360,11 +377,11 @@ export default function App() {
     // Shift+英字やカーソル移動を挟んだときは、かなや打ちかけが変わっているので取り消さない
     const after = retype?.after;
     if (retype && s.kana === after?.kana && s.caret === after.caret && s.pending === after.pending) {
-      const { before } = retype;
-      const removed = s.caret - before.caret;
-      const next = { ...s, kana: before.kana, caret: before.caret, pending: before.pending };
-      if (removed === 0) update(next);
-      else edit(s, next, before.caret, removed, 0);
+      const { before, pos, removed, inserted } = retype;
+      const next = { ...s, kana: before.kana, caret: before.caret, pending: before.pending, romaji: before.romaji };
+      if (removed === 0 && inserted === 0) update(next);
+      // 合わせるために戻した英字は、また英字のまま残ったローマ字に戻す
+      else edit(s, next, pos, inserted, removed, before.romaji.filter((x) => x >= pos && x < pos + removed));
       return;
     }
     if (s.pending !== "") {
@@ -458,7 +475,8 @@ export default function App() {
     const kana = splice(s.kana, seg.start, removed, surface);
     const boundaries = boundariesOf(s.segments).map(shift);
     retypeRef.current = null;
-    update({ ...s, kana, caret: seg.start + inserted, pinned: s.pinned.map(shift) });
+    const romaji = shiftRomaji(s.romaji, seg.start, removed, inserted);
+    update({ ...s, kana, caret: seg.start + inserted, pinned: s.pinned.map(shift), romaji });
     run(kana, s.segments, engine.convertWithBoundaries(kana, boundaries), shift, (segments) =>
       segments.map((x) => {
         if (x.start !== seg.start || x.reading !== surface) return x;

@@ -89,6 +89,11 @@ const TABLE: Record<string, string> = {
 /** 表の綴りの途中になりうる文字列 */
 const PREFIXES = new Set(Object.keys(TABLE).flatMap((k) => [...k].map((_, i) => k.slice(0, i + 1))));
 
+/** ローマ字の綴りの途中（または綴りそのもの）か */
+export function isRomajiPrefix(text: string): boolean {
+  return PREFIXES.has(text);
+}
+
 export type RomajiResult = {
   /** 確定したかな */
   kana: string;
