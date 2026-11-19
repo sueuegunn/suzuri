@@ -123,6 +123,17 @@ fn main() {
         println!("文脈つきの学習 {s}: {} → {}", first(&empty), first(&context));
     }
 
+    // 自立語だけの学習の効き方。「けんが」で「件が」を選んだあと、助詞の違う文節でも「件」になるか
+    let mut content = UserData::default();
+    engine.commit(&mut content, &[seg("けんが", "件が", false)]);
+    for s in ["けんを", "けんの", "けん", "そのけんについて", "ちばけんにすむ", "けんがある"] {
+        let first = |u: &UserData| {
+            let c = engine.convert(s, u);
+            c.segments.iter().map(|seg| seg.candidates[0].clone()).collect::<Vec<_>>().join("|")
+        };
+        println!("自立語の学習 {s}: {} → {}", first(&empty), first(&content));
+    }
+
     // 学習が上限まで溜まり、ユーザー辞書にも多く登録した状態。
     // 読みを上限の長さにした語を入れ、ラティスで引く長さが一番長くなるようにする
     let mut full = UserData {

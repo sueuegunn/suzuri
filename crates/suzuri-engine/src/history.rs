@@ -123,10 +123,16 @@ impl UserHistory {
 
     /// 覚えている表記を、新しく使った順に候補の先頭へ移す
     pub fn rank(&self, reading: &str, candidates: &mut Vec<String>) {
+        self.rank_with_tail(reading, "", candidates);
+    }
+
+    /// 覚えている表記に `tail` を付けたものを、新しく使った順に候補の先頭へ移す。候補になければ足す。
+    /// 自立語の読み（「けん」）で覚えた表記（「件」）を、付属語の付いた文節（「けんを」→「件を」）に効かせるのに使う
+    pub fn rank_with_tail(&self, reading: &str, tail: &str, candidates: &mut Vec<String>) {
         let Some(list) = self.entries.get(reading) else { return };
         let mut learned: Vec<&(String, u64)> = list.iter().collect();
         learned.sort_by_key(|(_, t)| std::cmp::Reverse(*t));
-        let learned: Vec<String> = learned.into_iter().map(|(s, _)| s.clone()).collect();
+        let learned: Vec<String> = learned.into_iter().map(|(s, _)| format!("{s}{tail}")).collect();
         candidates.retain(|c| !learned.contains(c));
         candidates.splice(0..0, learned);
     }

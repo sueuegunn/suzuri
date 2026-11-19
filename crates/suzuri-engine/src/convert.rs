@@ -401,6 +401,8 @@ impl Engine {
             .map_or(BOS_EOS, |node| node.lid);
         let mut best = String::new();
         let mut best_content_end = 0;
+        // 最良の並びの自立語が読みのどこで終わるか（文字位置）
+        let mut content_reading_end = range.start;
         for node in path
             .iter()
             .map(|&i| &lat.nodes[i])
@@ -409,6 +411,7 @@ impl Engine {
             best.push_str(&self.surface(lat, node));
             if !self.dict.is_functional(node.lid) {
                 best_content_end = best.len();
+                content_reading_end = node.end;
             }
         }
 
@@ -446,7 +449,13 @@ impl Engine {
                 candidates.push(s);
             }
         }
-        // 学習は、文脈なし → 前に出た自立語 → 直前の自立語の順に先頭へ移し、細かい文脈ほど前に来るようにする
+        // 学習は、自立語だけで覚えたもの → 文節の読みで覚えたもの → 前に出た自立語 → 直前の自立語の順に先頭へ移し、
+        // 細かいものほど前に来るようにする。自立語だけで覚えたもの（「けんが」で選んだ「件」）は、
+        // 最良の並びの付属語を付けて（「件を」）助詞の違う文節にも効かせる
+        if range.start < content_reading_end && content_reading_end < range.end {
+            let content_reading = lat.slice(range.start..content_reading_end);
+            user.history.rank_with_tail(content_reading, &tail, &mut candidates);
+        }
         user.history.rank(&reading, &mut candidates);
         let (adjacent, topics) = match before.split_last() {
             Some((last, rest)) => (Some(last.as_str()), rest),
@@ -558,6 +567,23 @@ impl Engine {
             .iter()
             .map(|s| self.analyze(&s.reading, &s.surface, user))
             .collect();
+
+        // 末尾に付属語がある文節は、自立語だけでも覚える（「けんが」で「件が」を選んだら「けん」→「件」）。
+        // 助詞の違う文節（「けんを」）でも同じ表記を先に出すため
+        let contents: Vec<Committed> = segments
+            .iter()
+            .zip(&analyses)
+            .filter_map(|(s, a)| {
+                let a = a.as_ref()?;
+                let len = s.reading.chars().count();
+                (a.content_pos > 0 && a.content_pos < len && !a.content.is_empty()).then(|| Committed {
+                    reading: s.reading.chars().take(a.content_pos).collect(),
+                    surface: a.content.clone(),
+                    was_first: s.was_first,
+                })
+            })
+            .collect();
+        user.history.commit(&contents);
 
         // 文脈つきの学習。第1候補以外を選んだときだけ新しく覚え、第1候補のままなら覚えているものの時刻だけを更新する
         let contents: Vec<&str> = segments
@@ -847,6 +873,27 @@ mod tests {
         // 「私は」のあと（自立語「私」）では「箸」
         let c = e.convert_with_boundaries("わたしははし", &[4], &user);
         assert_eq!(view(&c), [(0, 4, "私は"), (4, 6, "箸")]);
+    }
+
+    #[test]
+    fn content_learning_applies_to_other_particles() {
+        let e = engine();
+        let mut user = UserData::default();
+        let seg = |reading: &str, surface: &str, was_first: bool| CommitSegment {
+            reading: reading.into(),
+            surface: surface.into(),
+            was_first,
+            manual: false,
+        };
+        assert_eq!(e.convert_with_boundaries("はしを", &[], &user).segments[0].candidates[0], "橋を");
+        // 「はしは」で「箸は」を選ぶと、「はしを」も「はし」も「箸」が先に出る
+        e.commit(&mut user, &[seg("はしは", "箸は", false)]);
+        assert_eq!(e.convert_with_boundaries("はしを", &[], &user).segments[0].candidates[0], "箸を");
+        assert_eq!(e.convert_with_boundaries("はし", &[], &user).segments[0].candidates[0], "箸");
+        // 文節の読みで覚えたものは、自立語だけで覚えたものより先に出る
+        e.commit(&mut user, &[seg("はしを", "橋を", false)]);
+        e.commit(&mut user, &[seg("はしは", "箸は", false)]);
+        assert_eq!(e.convert_with_boundaries("はしを", &[], &user).segments[0].candidates[0], "橋を");
     }
 
     #[test]
