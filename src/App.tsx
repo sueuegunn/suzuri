@@ -22,6 +22,7 @@ import {
   length,
   mergeRange,
   retypeRange,
+  punctuationFences,
   resultText,
   romajiLetters,
   shiftBoundaries,
@@ -302,7 +303,10 @@ export default function App() {
     const fixed = old.segments
       .filter((seg) => seg.selected !== 0)
       .flatMap((seg) => [seg.start, seg.end].map((x) => shiftPosition(x, pos, removed, inserted)));
-    const [start, end] = retypeRange(boundaries, pinned, pos, pos + inserted, n, fixed);
+    // 消した文字のすぐ後ろが元から文節の切れ目なら、右の文節はそのまま残す
+    const rightIntact = removed > 0 && inserted === 0 && boundariesOf(old.segments).includes(pos + removed);
+    const fences = punctuationFences(next.kana, boundaries);
+    const [start, end] = retypeRange(boundaries, pinned, pos, pos + inserted, n, fixed, fences, rightIntact);
     run(next.kana, old.segments, engine.resegment(next.kana, boundaries, start, end), (x) =>
       shiftPosition(x, pos, removed, inserted),
     );

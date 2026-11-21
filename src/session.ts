@@ -79,12 +79,23 @@ export function rangeAround(boundaries: number[], from: number, to: number, n: n
 /** 打ったときに、打った位置からこれだけ前（文字数）までに始まる文節を区切り直す */
 export const RETYPE_WINDOW = 12;
 
+/** 文の切れ目になる文字。この直後の区切りは、打つそばから区切り直すときに越えない */
+const SENTENCE_BREAKS = new Set(["、", "。", "？", "！", "\n"]);
+
+/** 区切りのうち、句読点や改行の直後にあるもの（読みの文字位置） */
+export function punctuationFences(kana: string, boundaries: number[]): number[] {
+  const chars = Array.from(kana);
+  return boundaries.filter((b) => b > 0 && SENTENCE_BREAKS.has(chars[b - 1]));
+}
+
 /**
  * 打ったときに区切り直す範囲。直した文節に加えて、1つ前の文節と、打った位置から
  * RETYPE_WINDOW 文字以内に始まる文節を含める。打っている途中は語の切れ目が決まりきらず
  * （「くるま」の時点で区切ると「車｜で」と割れる、「あにめー」で「アニメ｜ー」と割れる）、
  * 前の文節とつなぎ直せるようにするため。それより前は、打つたびに入れ替わってちらつかないよう触らない。
- * 手で置いた区切り（pinned）と、候補を選んだ文節の両端（fixed）は越えない
+ * 手で置いた区切り（pinned）と、候補を選んだ文節の両端（fixed）と、句読点の直後の区切り（fences）は越えない。
+ * `rightIntact` は、消した文字のすぐ後ろが元から文節の切れ目だったか。そのときは右の文節の文字は
+ * 変わっていないので区切り直さない（前の文を Backspace で消すたびに、後ろの文の先頭が割られ直さないように）
  */
 export function retypeRange(
   boundaries: number[],
@@ -93,13 +104,18 @@ export function retypeRange(
   to: number,
   n: number,
   fixed: number[] = [],
+  fences: number[] = [],
+  rightIntact = false,
 ): [number, number] {
-  const [start, end] = rangeAround(boundaries, from, to, n);
-  const floor = Math.max(0, ...[...pinned, ...fixed].filter((b) => b <= start));
+  const [start, around] = rangeAround(boundaries, from, to, n);
+  const floor = Math.max(0, ...[...pinned, ...fixed].filter((b) => b <= start), ...fences.filter((b) => b <= from));
   const previous = Math.max(0, ...boundaries.filter((b) => b < start));
   const near = Math.min(previous, ...boundaries.filter((b) => b >= from - RETYPE_WINDOW && b < start));
   const reach = from - RETYPE_WINDOW <= 0 ? 0 : near;
-  return [Math.max(floor, reach), end];
+  const begin = Math.max(floor, reach);
+  const right = rightIntact && from === to && boundaries.includes(from) ? from : around;
+  const end = Math.min(right, ...fences.filter((b) => b >= to && b > begin));
+  return [begin, Math.max(begin, end)];
 }
 
 /**

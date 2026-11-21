@@ -15,6 +15,9 @@ use crate::history::Committed;
 use crate::kana::{ascii_variants, hiragana_to_katakana, symbol_variants};
 use crate::user_dict::fold_char;
 
+/// 文の切れ目になる句読点。前後の語と切り離して1文節にする
+const SENTENCE_BREAKS: [char; 4] = ['、', '。', '？', '！'];
+
 /// 辞書にない文字を1文字の単語として扱うときのコスト。辞書の単語より十分大きくする
 const UNKNOWN_COST: i32 = 20_000;
 /// ユーザー辞書の語のコスト。同じ読みのシステム辞書の語より出やすく、
@@ -186,9 +189,11 @@ impl Engine {
                 cuts.push(b.start);
             }
         }
-        // スペースは前後の語と切り離し、それだけで1文節にする
+        // スペースと句読点は前後の語と切り離し、それだけで1文節にする。
+        // 句読点の後ろが次の語とつながる（「？そうなんです」）と、句読点で区切られた文どうしが
+        // 打つそばからの区切り直しで影響し合うため（画面は句読点の直後の区切りを越えて区切り直さない）
         for (i, c) in reading.chars().enumerate() {
-            if c.is_whitespace() {
+            if c.is_whitespace() || SENTENCE_BREAKS.contains(&c) {
                 cuts.extend([i, i + 1].into_iter().filter(|&p| 0 < p && p < n && inside(p)));
             }
         }
@@ -975,6 +980,14 @@ mod tests {
         let e = engine();
         let c = e.convert("。", &UserData::default());
         assert_eq!(c.segments[0].candidates, ["。", ".", "．"]);
+    }
+
+    #[test]
+    fn makes_punctuation_its_own_segment() {
+        let e = engine();
+        let c = e.convert("はし？わたる。はし、わた", &UserData::default());
+        let readings: Vec<&str> = c.segments.iter().map(|s| s.reading.as_str()).collect();
+        assert_eq!(readings, ["はし", "？", "わたる", "。", "はし", "、", "わた"]);
     }
 
     #[test]

@@ -4,6 +4,7 @@ import {
   clampPin,
   emptySession,
   mergeRange,
+  punctuationFences,
   rangeAround,
   retypeRange,
   shiftBoundaries,
@@ -48,6 +49,26 @@ describe("retypeRange", () => {
   it("does not cross a pinned boundary or a chosen segment", () => {
     expect(retypeRange([4, 9], [9], 10, 11, 11)).toEqual([9, 11]);
     expect(retypeRange([3, 4], [], 6, 7, 7, [3, 4])).toEqual([4, 7]);
+  });
+  it("does not cross a boundary right after punctuation", () => {
+    // 「きょうは|はれ。|あした」の「あした」の末尾に打っても、前の文は区切り直さない
+    expect(retypeRange([4, 7], [], 10, 11, 11, [], [7])).toEqual([7, 11]);
+    // 2文目の先頭で消しても、前の文に戻らない
+    expect(retypeRange([4, 7], [], 7, 7, 10, [], [7])).toEqual([7, 10]);
+  });
+  it("keeps the right segment when deleting up to a boundary that was already there", () => {
+    // 前の文の末尾を Backspace で消したとき、右の文節（後ろの文の先頭）は区切り直さない
+    expect(retypeRange([4, 9], [], 4, 4, 12, [], [], true)).toEqual([0, 4]);
+    // 文節の途中で消したときは、その文節（と1つ前の文節）を区切り直す
+    expect(retypeRange([4, 9], [], 6, 6, 12, [], [], true)).toEqual([0, 9]);
+    // 元からの切れ目でなければ、今までどおり両側を区切り直す
+    expect(retypeRange([4, 9], [], 4, 4, 12)).toEqual([0, 9]);
+  });
+});
+
+describe("punctuationFences", () => {
+  it("finds boundaries right after punctuation", () => {
+    expect(punctuationFences("はれ。あめ、くもり", [2, 3, 5, 6])).toEqual([3, 6]);
   });
 });
 
