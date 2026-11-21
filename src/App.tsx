@@ -22,6 +22,7 @@ import {
   length,
   mergeRange,
   retypeRange,
+  shiftSegments,
   punctuationFences,
   resultText,
   romajiLetters,
@@ -295,21 +296,19 @@ export default function App() {
       return;
     }
     const n = length(next.kana);
-    const boundaries = shiftBoundaries(boundariesOf(old.segments), pos, removed, inserted, n);
     const pinned = shiftBoundaries(old.pinned, pos, removed, inserted, n);
-    next = { ...next, pinned };
+    // 文節も今の読みに合わせてずらしておく。変換の結果が届く前に次の打鍵が来ても、区切りがずれないように
+    const segments = shiftSegments(old.segments, next.kana, pos, removed, inserted);
+    const boundaries = boundariesOf(segments);
+    next = { ...next, pinned, segments };
     update(next);
     // 候補を選んだ文節は区切り直さず、選んだ候補を保つ
-    const fixed = old.segments
-      .filter((seg) => seg.selected !== 0)
-      .flatMap((seg) => [seg.start, seg.end].map((x) => shiftPosition(x, pos, removed, inserted)));
+    const fixed = segments.filter((seg) => seg.selected !== 0).flatMap((seg) => [seg.start, seg.end]);
     // 消した文字のすぐ後ろが元から文節の切れ目なら、右の文節はそのまま残す
     const rightIntact = removed > 0 && inserted === 0 && boundariesOf(old.segments).includes(pos + removed);
     const fences = punctuationFences(next.kana, boundaries);
     const [start, end] = retypeRange(boundaries, pinned, pos, pos + inserted, n, fixed, fences, rightIntact);
-    run(next.kana, old.segments, engine.resegment(next.kana, boundaries, start, end), (x) =>
-      shiftPosition(x, pos, removed, inserted),
-    );
+    run(next.kana, segments, engine.resegment(next.kana, boundaries, start, end));
   };
 
   /**

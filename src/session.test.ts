@@ -9,6 +9,7 @@ import {
   retypeRange,
   shiftBoundaries,
   shiftRomaji,
+  shiftSegments,
   splice,
   typeRomaji,
 } from "./session";
@@ -23,6 +24,43 @@ describe("shiftBoundaries", () => {
   });
   it("drops boundaries at the ends", () => {
     expect(shiftBoundaries([1], 0, 1, 0, 3)).toEqual([]);
+  });
+});
+
+describe("shiftSegments", () => {
+  const seg = (start: number, end: number, reading: string, surface: string, selected = 0) => ({
+    start,
+    end,
+    reading,
+    candidates: [surface, reading],
+    selected,
+  });
+  // 「あとの|ぶんしょうは|どういう」
+  const segments = [seg(0, 3, "あとの", "後の"), seg(3, 9, "ぶんしょうは", "文章は"), seg(9, 13, "どういう", "どういう")];
+  it("keeps later segments aligned while deleting before them", () => {
+    // 「あとの」の「の」を消す
+    expect(shiftSegments(segments, "あとぶんしょうはどういう", 2, 1, 0).map((s) => [s.start, s.end, s.reading])).toEqual([
+      [0, 2, "あと"],
+      [2, 8, "ぶんしょうは"],
+      [8, 12, "どういう"],
+    ]);
+    // 続けて「あと」も消すと、その文節はなくなる
+    const once = shiftSegments(segments, "あとぶんしょうはどういう", 2, 1, 0);
+    expect(shiftSegments(once, "ぶんしょうはどういう", 0, 2, 0).map((s) => [s.start, s.end, s.reading])).toEqual([
+      [0, 6, "ぶんしょうは"],
+      [6, 10, "どういう"],
+    ]);
+  });
+  it("adds text typed at a boundary to the left segment", () => {
+    expect(shiftSegments(segments, "あとのがぶんしょうはどういう", 3, 0, 1).map((s) => [s.start, s.end])).toEqual([
+      [0, 4],
+      [4, 10],
+      [10, 14],
+    ]);
+  });
+  it("keeps candidates and selection", () => {
+    const chosen = [seg(0, 3, "あとの", "後の"), seg(3, 9, "ぶんしょうは", "文章は", 1)];
+    expect(shiftSegments(chosen, "あとぶんしょうは", 2, 1, 0)[1]).toMatchObject({ selected: 1, reading: "ぶんしょうは" });
   });
 });
 

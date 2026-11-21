@@ -55,15 +55,44 @@ export function shiftBoundaries(
 ): number[] {
   const out = new Set<number>();
   for (const b of boundaries) {
-    let nb: number;
-    if (b < pos) nb = b;
-    else if (b <= pos + removed) {
-      // 区切りの位置に入力したときは、左の文節に足す
-      nb = removed === 0 && pos > 0 ? b + inserted : pos + inserted;
-    } else nb = b - removed + inserted;
+    const nb = shiftBoundary(b, pos, removed, inserted);
     if (nb > 0 && nb < newLength) out.add(nb);
   }
   return [...out].sort((a, b) => a - b);
+}
+
+/** 区切り1つ分の `shiftBoundaries`。先頭と末尾以外の区切りに使う */
+function shiftBoundary(b: number, pos: number, removed: number, inserted: number): number {
+  if (b < pos) return b;
+  // 区切りの位置に入力したときは、左の文節に足す
+  if (b <= pos + removed) return removed === 0 && pos > 0 ? b + inserted : pos + inserted;
+  return b - removed + inserted;
+}
+
+/**
+ * ひらがなを直したあとの読み `kana` に合わせて、文節の位置と読みをずらす（`shiftBoundaries` と同じ規則）。
+ * 空になった文節は除く。候補はそのまま残す（変換の結果が届くまで、前の表記を出しておく）。
+ * 変換の結果を待たずに次の打鍵が来ても（Backspace の押しっぱなし）、区切りを今の読みから求められるようにするため。
+ * 古い文節のまま次の打鍵の分だけずらすと、届かなかった打鍵の分だけ区切りがずれる
+ */
+export function shiftSegments(
+  segments: Segment[],
+  kana: string,
+  pos: number,
+  removed: number,
+  inserted: number,
+): Segment[] {
+  const chars = Array.from(kana);
+  const n = chars.length;
+  const last = segments.length === 0 ? 0 : segments[segments.length - 1].end;
+  const shift = (b: number) =>
+    b === 0 ? 0 : b >= last ? n : Math.min(n, Math.max(0, shiftBoundary(b, pos, removed, inserted)));
+  return segments.flatMap((seg) => {
+    const [start, end] = [shift(seg.start), shift(seg.end)];
+    if (start >= end) return [];
+    const reading = chars.slice(start, end).join("");
+    return [{ ...seg, start, end, reading }];
+  });
 }
 
 /**
